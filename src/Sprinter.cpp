@@ -158,6 +158,42 @@
 #include <stdio.h>
 #include "xil_printf.h"
 #include <stdint.h>
+#include "xil_types.h"
+#include "xtmrctr.h"
+#include "xparameters.h"
+#include "xil_io.h"
+#include "xil_exception.h"
+#include "xscugic.h"
+#include "xgpio.h"
+
+XGpio LEDInst;
+XGpio BTNInst;
+XGpio ShieldInst;
+static int btn_value;
+
+#define STEP_X_PIN 2
+#define STEP_Y_PIN 3
+#define STEP_Z_PIN 4
+#define DIR_X_PIN 5
+#define DIR_Y_PIN 6
+#define DIR_Z_PIN 7
+#define X_MIN_PIN 8
+#define Y_MIN_PIN 9
+#define Z_MIN_PIN 10
+
+#define BTNS_DEVICE_ID		XPAR_BUTTONS_DEVICE_ID
+#define BTN_INT 			XGPIO_IR_CH1_MASK
+#define LEDS_DEVICE_ID		XPAR_LEDS_DEVICE_ID
+#define SHIELDS_DEVICE_ID		XPAR_SHIELDS_DEVICE_ID
+
+#define _SET(TARGET,BIT) (TARGET |= 1 << BIT)
+#define _CLR(TARGET,BIT) (TARGET &= ~(1 << BIT))
+#define _TGL(TARGET,BIT) (TARGET ^= 1 << BIT)
+#define _CHK(TARGET,BIT) ((TARGET >> BIT) & 1)
+
+static int shields_data;
+static int intr_cntr;
+static int pulse_status = 0;
 
 #define F_CPU 650000000
 
@@ -181,6 +217,11 @@
 void __cxa_pure_virtual() {
 }
 ;
+
+//function prototypes
+void initializeGPIO();
+void initializeAxiTimer();
+
 
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
 // http://objects.reprap.org/wiki/Mendel_User_Manual:_RepRapGCodes
@@ -274,10 +315,10 @@ float move_acceleration = _ACCELERATION;         // Normal acceleration mm/s^2
 		unsigned long min_seg_time = _MIN_SEG_TIME;
 #ifdef PIDTEMP
 		unsigned int PID_Kp = PID_PGAIN,
-PID_Ki = PID_IGAIN, PID_Kd = PID_DGAIN;
+		PID_Ki = PID_IGAIN, PID_Kd = PID_DGAIN;
 #endif
 
-long max_acceleration_units_per_sq_second[4] =
+		long max_acceleration_units_per_sq_second[4] =
 		_MAX_ACCELERATION_UNITS_PER_SQ_SECOND; // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
 
 //float max_start_speed_units_per_second[] = _MAX_START_SPEED_UNITS_PER_SECOND;
@@ -313,9 +354,9 @@ long max_acceleration_units_per_sq_second[4] =
 		bool home_all_axis = true;
 //unsigned ?? ToDo: Check
 		int feedrate = 1500,
-next_feedrate, saved_feedrate;
+		next_feedrate, saved_feedrate;
 
-long gcode_N, gcode_LastN;
+		long gcode_N, gcode_LastN;
 bool relative_mode = false;  //Determines Absolute or Relative Coordinates
 
 //unsigned long steps_taken[NUM_AXIS];
@@ -405,7 +446,7 @@ void initsd()
 	sdactive = false;
 #if SDSS >- 1
 	if(root.isOpen())
-	root.close();
+		root.close();
 
 	if (!card.init(SPI_FULL_SPEED,SDSS)) {
 		//if (!card.init(SPI_HALF_SPEED,SDSS))
@@ -413,76 +454,76 @@ void initsd()
 	}
 	else if (!volume.init(&card))
 	//        //showString(PSTR("volume.init failed\r\n"));
-	else if (!root.openRoot(&volume))
+		else if (!root.openRoot(&volume))
 	//      //showString(PSTR("openRoot failed\r\n"));
-	else {
-		sdactive = true;
-		print_disk_info();
+			else {
+				sdactive = true;
+				print_disk_info();
 
 #ifdef SDINITFILE
-		file.close();
-		if(file.open(&root, "init.g", O_READ)) {
-			sdpos = 0;
-			filesize = file.fileSize();
-			sdmode = true;
-		}
+				file.close();
+				if(file.open(&root, "init.g", O_READ)) {
+					sdpos = 0;
+					filesize = file.fileSize();
+					sdmode = true;
+				}
 #endif
-	}
+			}
 
 #endif
-}
+		}
 
 #ifdef SD_FAST_XFER_AKTIV
 
 #ifdef PIDTEMP
-extern volatile unsigned char g_heater_pwm_val;
+		extern volatile unsigned char g_heater_pwm_val;
 #endif
 
-void fast_xfer()
-{
-	char *pstr;
-	boolean done = false;
+		void fast_xfer()
+		{
+			char *pstr;
+			boolean done = false;
 
 	//force heater pins low
-	if(HEATER_0_PIN > -1) WRITE(HEATER_0_PIN,LOW);
+			if(HEATER_0_PIN > -1) WRITE(HEATER_0_PIN,LOW);
 	//if(HEATER_1_PIN > -1) WRITE(HEATER_1_PIN,LOW);
 
 #ifdef PIDTEMP
-	g_heater_pwm_val = 0;
+			g_heater_pwm_val = 0;
 #endif
 
-	lastxferchar = 1;
-	xferbytes = 0;
+			lastxferchar = 1;
+			xferbytes = 0;
 
-	pstr = strstr(strchr_pointer+4, " ");
+			pstr = strstr(strchr_pointer+4, " ");
 
-	if(pstr == NULL)
-	{
+			if(pstr == NULL)
+			{
 //      //showString(PSTR("invalid command\r\n"));
-		return;
-	}
+				return;
+			}
 
-	*pstr = '\0';
+			*pstr = '\0';
 
 	//check mode (currently only RAW is supported
-	if(strcmp(strchr_pointer+4, "RAW") != 0)
-	{
+			if(strcmp(strchr_pointer+4, "RAW") != 0)
+			{
 //      //showString(PSTR("Invalid transfer codec\r\n"));
-		return;
-	} else {
+				return;
+			} else {
 //      //showString(PSTR("Selected codec: "));
 		//Serial.println(strchr_pointer+4);
-	}
+			}
 
-	if (!file.open(&root, pstr+1, O_CREAT | O_APPEND | O_WRITE | O_TRUNC))
-	{
+			if (!file.open(&root, pstr+1, O_CREAT | O_APPEND | O_WRITE | O_TRUNC))
+			{
 //      //showString(PSTR("open failed, File: "));
 //      Serial.print(pstr+1);
 //      //showString(PSTR("."));
-	} else {
+			} else {
 //      //showString(PSTR("Writing to file: "));
 //      //Serial.println(pstr+1);
-	}
+			}
 
 //    //showString(PSTR("ok\r\n"));
 
@@ -492,76 +533,76 @@ void fast_xfer()
 	//if a non \0 character is recieved at the beginning, host has failed somehow, kill the transfer.
 
 	//read SD_FAST_XFER_CHUNK_SIZE bytes (or until \0 is recieved)
-	while(!done)
-	{
-		while(!Serial.available())
-		{
-		}
-		if(Serial.read() != 0)
-		{
-			//host has failed, this isn't a RAW chunk, it's an actual command
-			file.sync();
-			file.close();
-			return;
-		}
-
-		for(int i=0;i<SD_FAST_XFER_CHUNK_SIZE+1;i++)
-		{
-			while(!Serial.available())
+			while(!done)
 			{
-			}
-			lastxferchar = Serial.read();
+				while(!Serial.available())
+				{
+				}
+				if(Serial.read() != 0)
+				{
+			//host has failed, this isn't a RAW chunk, it's an actual command
+					file.sync();
+					file.close();
+					return;
+				}
+
+				for(int i=0;i<SD_FAST_XFER_CHUNK_SIZE+1;i++)
+				{
+					while(!Serial.available())
+					{
+					}
+					lastxferchar = Serial.read();
 			//buffer the data...
-			fastxferbuffer[i] = lastxferchar;
+					fastxferbuffer[i] = lastxferchar;
 
-			xferbytes++;
+					xferbytes++;
 
-			if(lastxferchar == 0)
-			break;
-		}
+					if(lastxferchar == 0)
+						break;
+				}
 
-		if(fastxferbuffer[0] != 0)
-		{
-			fastxferbuffer[SD_FAST_XFER_CHUNK_SIZE] = 0;
-			file.write(fastxferbuffer);
+				if(fastxferbuffer[0] != 0)
+				{
+					fastxferbuffer[SD_FAST_XFER_CHUNK_SIZE] = 0;
+					file.write(fastxferbuffer);
 //        //showString(PSTR("ok\r\n"));
-		} else {
+				} else {
 //        //showString(PSTR("Wrote "));
 //        Serial.print(xferbytes);
 //        //showString(PSTR(" bytes.\r\n"));
-			done = true;
-		}
-	}
+					done = true;
+				}
+			}
 
-	file.sync();
-	file.close();
-}
+			file.sync();
+			file.close();
+		}
 #endif
 
-void print_disk_info(void)
-{
+		void print_disk_info(void)
+		{
 
 	// print the type of card
 //    //showString(PSTR("\nCard type: "));
-	switch(card.type())
-	{
-		case SD_CARD_TYPE_SD1:
+			switch(card.type())
+			{
+				case SD_CARD_TYPE_SD1:
 //        //showString(PSTR("SD1\r\n"));
-		break;
-		case SD_CARD_TYPE_SD2:
+				break;
+				case SD_CARD_TYPE_SD2:
 //        //showString(PSTR("SD2\r\n"));
-		break;
-		case SD_CARD_TYPE_SDHC:
+				break;
+				case SD_CARD_TYPE_SDHC:
 //        //showString(PSTR("SDHC\r\n"));
-		break;
-		default:
+				break;
+				default:
 //        //showString(PSTR("Unknown\r\n"));
-	}
+			}
 
 	//uint64_t freeSpace = volume.clusterCount()*volume.blocksPerCluster()*512;
 	//uint64_t occupiedSpace = (card.cardSize()*512) - freeSpace;
 	// print the type and size of the first FAT-type volume
-	uint32_t volumesize;
+			uint32_t volumesize;
 //    //showString(PSTR("\nVolume type is FAT"));
 //    //Serial.println(volume.fatType(), DEC);
 
@@ -664,20 +705,23 @@ void showString (char *s)
 //  char c;
 //
 //  while ((c = pgm_read_byte(s++)) != 0)
-    printf("%s",s);
+	printf("%s",s);
 }
 
 //------------------------------------------------
 // Init 
 //------------------------------------------------
 void setup() {
-    setvbuf(stdin, NULL, _IONBF, 0);
-    print("Sprinter started.\r\n");
+	setvbuf(stdin, NULL, _IONBF, 0);
+	print("Sprinter started.\r\n");
 //  Serial.begin(BAUDRATE);
- showString("Sprinter\r\n");
- showString(_VERSION_TEXT);
- showString("\r\n");
- showString("start\r\n");
+	showString("Sprinter\r\n");
+	showString(_VERSION_TEXT);
+	showString("\r\n");
+	showString("start\r\n");
+
+	initializeGPIO();
+	initializeAxiTimer();
 
 	for (int i = 0; i < BUFSIZE; i++) {
 		fromsd[i] = false;
@@ -846,14 +890,14 @@ void setup() {
 #endif
 
 #if defined(PID_SOFT_PWM) || (defined(FAN_SOFT_PWM) && (FAN_PIN > -1))
- showString("Soft PWM Init\r\n");
+	showString("Soft PWM Init\r\n");
 	init_Timer2_softpwm();
 #endif
 
- showString("Planner Init\r\n");
+	showString("Planner Init\r\n");
 	plan_init();  // Initialize planner;
 
- showString("Stepper Timer init\r\n");
+	showString("Stepper Timer init\r\n");
 	st_init();    // Initialize stepper
 
 #ifdef USE_EEPROM_SETTINGS
@@ -867,18 +911,18 @@ void setup() {
 #endif
 
 	//Free Ram
- showString("Free Ram: ");
+	showString("Free Ram: ");
  //Serial.println(FreeRam1());
 
 	//Planner Buffer Size
- showString("Plan Buffer Size:");
- printf("%d\r\n",(int)sizeof(block_t)*BLOCK_BUFFER_SIZE);
- showString(" / ");
- printf("%d\r\n",BLOCK_BUFFER_SIZE);
+	showString("Plan Buffer Size:");
+	printf("%d\r\n",(int)sizeof(block_t)*BLOCK_BUFFER_SIZE);
+	showString(" / ");
+	printf("%d\r\n",BLOCK_BUFFER_SIZE);
 
 	for (int8_t i = 0; i < NUM_AXIS; i++) {
 		axis_steps_per_sqr_second[i] = max_acceleration_units_per_sq_second[i]
-				* axis_steps_per_unit[i];
+		* axis_steps_per_unit[i];
 	}
 
 }
@@ -946,12 +990,12 @@ void check_buffer_while_arc() {
 //READ COMMAND FROM UART
 //------------------------------------------------
 void get_command() {
-		serial_char = getchar();
-		printf("%c",serial_char);
+	serial_char = getchar();
+	printf("%c",serial_char);
 
-		if (serial_char == '\n' || serial_char == '\r'
-				|| (serial_char == ':' && comment_mode == false)
-				|| serial_count >= (MAX_CMD_SIZE - 1)) {
+	if (serial_char == '\n' || serial_char == '\r'
+		|| (serial_char == ':' && comment_mode == false)
+		|| serial_count >= (MAX_CMD_SIZE - 1)) {
 			if (!serial_count) { //if empty line
 				comment_mode = false; // for new command
 				return;
@@ -963,49 +1007,49 @@ void get_command() {
 			if (strstr(cmdbuffer[bufindw], "N") != NULL) {
 				strchr_pointer = strchr(cmdbuffer[bufindw], 'N');
 				gcode_N = (strtol(
-						&cmdbuffer[bufindw][strchr_pointer - cmdbuffer[bufindw]
-								+ 1], NULL, 10));
+					&cmdbuffer[bufindw][strchr_pointer - cmdbuffer[bufindw]
+						+ 1], NULL, 10));
 				if (gcode_N != gcode_LastN + 1
-						&& (strstr(cmdbuffer[bufindw], "M110") == NULL)) {
+					&& (strstr(cmdbuffer[bufindw], "M110") == NULL)) {
 					showString("Serial Error: Line Number is not Last Line Number+1, Last Line:");
-					printf("%d\r\n",gcode_LastN);
-					printf("%d\r\n",gcode_N);
+				printf("%d\r\n",gcode_LastN);
+				printf("%d\r\n",gcode_N);
 					//Serial.println(gcode_LastN);
 					////Serial.println(gcode_N);
-					FlushSerialRequestResend();
-					serial_count = 0;
-					return;
-				}
+				FlushSerialRequestResend();
+				serial_count = 0;
+				return;
+			}
 
-				if (strstr(cmdbuffer[bufindw], "*") != NULL) {
-					byte checksum = 0;
-					byte count = 0;
-					while (cmdbuffer[bufindw][count] != '*')
-						checksum = checksum ^ cmdbuffer[bufindw][count++];
-					strchr_pointer = strchr(cmdbuffer[bufindw], '*');
+			if (strstr(cmdbuffer[bufindw], "*") != NULL) {
+				byte checksum = 0;
+				byte count = 0;
+				while (cmdbuffer[bufindw][count] != '*')
+					checksum = checksum ^ cmdbuffer[bufindw][count++];
+				strchr_pointer = strchr(cmdbuffer[bufindw], '*');
 
-					if ((int) (strtod(
-							&cmdbuffer[bufindw][strchr_pointer
-									- cmdbuffer[bufindw] + 1], NULL))
-							!= checksum) {
-						showString("Error: checksum mismatch, Last Line:");
+				if ((int) (strtod(
+					&cmdbuffer[bufindw][strchr_pointer
+						- cmdbuffer[bufindw] + 1], NULL))
+					!= checksum) {
+					showString("Error: checksum mismatch, Last Line:");
 						//Serial.println(gcode_LastN);
-						printf("%d\r\n",gcode_LastN);
-						FlushSerialRequestResend();
-						serial_count = 0;
-						return;
-					}
+				printf("%d\r\n",gcode_LastN);
+				FlushSerialRequestResend();
+				serial_count = 0;
+				return;
+			}
 					//if no errors, continue parsing
-				} else {
-					showString("Error: No Checksum with line number, Last Line:");
+		} else {
+			showString("Error: No Checksum with line number, Last Line:");
 					// Serial.println(gcode_LastN);
-					printf("%d\r\n",gcode_LastN);
-					FlushSerialRequestResend();
-					serial_count = 0;
-					return;
-				}
+			printf("%d\r\n",gcode_LastN);
+			FlushSerialRequestResend();
+			serial_count = 0;
+			return;
+		}
 
-				gcode_LastN = gcode_N;
+		gcode_LastN = gcode_N;
 				//if no errors, continue parsing
 			} else  // if we don't receive 'N' but still see '*'
 			{
@@ -1021,17 +1065,17 @@ void get_command() {
 			if ((strstr(cmdbuffer[bufindw], "G") != NULL)) {
 				strchr_pointer = strchr(cmdbuffer[bufindw], 'G');
 				switch ((int) ((strtod(
-						&cmdbuffer[bufindw][strchr_pointer - cmdbuffer[bufindw]
-								+ 1], NULL)))) {
-				case 0:
-				case 1:
+					&cmdbuffer[bufindw][strchr_pointer - cmdbuffer[bufindw]
+						+ 1], NULL)))) {
+					case 0:
+					case 1:
 					// showString("ok\r\n");
 					////Serial.println("ok");
 					printf("%s\r\n","ok");
 					break;
 
 
-				default:
+					default:
 					break;
 				}
 			}
@@ -1046,29 +1090,29 @@ void get_command() {
 			serial_count = 0; //clear buffer
 		} else {
 			if (serial_char == ';')
-				comment_mode = true;
+			comment_mode = true;
 			if (!comment_mode)
 				cmdbuffer[bufindw][serial_count++] = serial_char;
 		}
 	}
 
 
-static bool check_endstops = true;
+	static bool check_endstops = true;
 
-void enable_endstops(bool check) {
-	check_endstops = check;
-}
+	void enable_endstops(bool check) {
+		check_endstops = check;
+	}
 
-FORCE_INLINE float code_value() {
-	return (strtod(&cmdbuffer[bufindr][strchr_pointer - cmdbuffer[bufindr] + 1],
+	FORCE_INLINE float code_value() {
+		return (strtod(&cmdbuffer[bufindr][strchr_pointer - cmdbuffer[bufindr] + 1],
 			NULL));
-}
-FORCE_INLINE long code_value_long() {
-	return (strtol(&cmdbuffer[bufindr][strchr_pointer - cmdbuffer[bufindr] + 1],
+	}
+	FORCE_INLINE long code_value_long() {
+		return (strtol(&cmdbuffer[bufindr][strchr_pointer - cmdbuffer[bufindr] + 1],
 			NULL, 10));
-}
-FORCE_INLINE bool code_seen(char code_string[]) {
-	return (strstr(cmdbuffer[bufindr], code_string) != NULL);
+	}
+	FORCE_INLINE bool code_seen(char code_string[]) {
+		return (strstr(cmdbuffer[bufindr], code_string) != NULL);
 }  //Return True if the string was found
 
 FORCE_INLINE bool code_seen(char code) {
@@ -1080,28 +1124,28 @@ FORCE_INLINE void homing_routine(char axis) {
 	int min_pin, max_pin, home_dir, max_length, home_bounce;
 
 	switch (axis) {
-	case X_AXIS:
+		case X_AXIS:
 		min_pin = X_MIN_PIN;
 		max_pin = X_MAX_PIN;
 		home_dir = X_HOME_DIR;
 		max_length = X_MAX_LENGTH;
 		home_bounce = 10;
 		break;
-	case Y_AXIS:
+		case Y_AXIS:
 		min_pin = Y_MIN_PIN;
 		max_pin = Y_MAX_PIN;
 		home_dir = Y_HOME_DIR;
 		max_length = Y_MAX_LENGTH;
 		home_bounce = 10;
 		break;
-	case Z_AXIS:
+		case Z_AXIS:
 		min_pin = Z_MIN_PIN;
 		max_pin = Z_MAX_PIN;
 		home_dir = Z_HOME_DIR;
 		max_length = Z_MAX_LENGTH;
 		home_bounce = 4;
 		break;
-	default:
+		default:
 		//never reached
 		break;
 	}
@@ -1109,7 +1153,7 @@ FORCE_INLINE void homing_routine(char axis) {
 	if ((min_pin > -1 && home_dir == -1) || (max_pin > -1 && home_dir == 1)) {
 		current_position[axis] = -1.5 * max_length * home_dir;
 		plan_set_position(current_position[X_AXIS], current_position[Y_AXIS],
-				current_position[Z_AXIS], current_position[E_AXIS]);
+			current_position[Z_AXIS], current_position[E_AXIS]);
 		destination[axis] = 0;
 		feedrate = homing_feedrate[axis];
 		prepare_move();
@@ -1117,14 +1161,14 @@ FORCE_INLINE void homing_routine(char axis) {
 
 		current_position[axis] = home_bounce / 2 * home_dir;
 		plan_set_position(current_position[X_AXIS], current_position[Y_AXIS],
-				current_position[Z_AXIS], current_position[E_AXIS]);
+			current_position[Z_AXIS], current_position[E_AXIS]);
 		destination[axis] = 0;
 		prepare_move();
 		st_synchronize();
 
 		current_position[axis] = -home_bounce * home_dir;
 		plan_set_position(current_position[X_AXIS], current_position[Y_AXIS],
-				current_position[Z_AXIS], current_position[E_AXIS]);
+			current_position[Z_AXIS], current_position[E_AXIS]);
 		destination[axis] = 0;
 		feedrate = homing_feedrate[axis] / 2;
 		prepare_move();
@@ -1133,7 +1177,7 @@ FORCE_INLINE void homing_routine(char axis) {
 		current_position[axis] = (home_dir == -1) ? 0 : max_length;
 		current_position[axis] += add_homing[axis];
 		plan_set_position(current_position[X_AXIS], current_position[Y_AXIS],
-				current_position[Z_AXIS], current_position[E_AXIS]);
+			current_position[Z_AXIS], current_position[E_AXIS]);
 		destination[axis] = current_position[axis];
 		feedrate = 0;
 	}
@@ -1150,8 +1194,9 @@ FORCE_INLINE void process_commands() {
 		switch ((int) code_value()) {
 		case 0: // G0 -> G1
 		case 1: // G1
+		print("process commands fired.\r\n");
 #if (defined DISABLE_CHECK_DURING_ACC) || (defined DISABLE_CHECK_DURING_MOVE) || (defined DISABLE_CHECK_DURING_TRAVEL)
-			manage_heater();
+		manage_heater();
 #endif
 			get_coordinates(); // For X Y Z E F
 			prepare_move();
@@ -1174,8 +1219,8 @@ FORCE_INLINE void process_commands() {
 			return;
 #endif
 		case 4: // G4 dwell
-			codenum = 0;
-			if (code_seen('P'))
+		codenum = 0;
+		if (code_seen('P'))
 				codenum = code_value(); // milliseconds to wait
 			if (code_seen('S'))
 				codenum = code_value() * 1000; // seconds to wait
@@ -1186,75 +1231,75 @@ FORCE_INLINE void process_commands() {
 			}
 			break;
 		case 28: //G28 Home all Axis one at a time
-			saved_feedrate = feedrate;
-			saved_feedmultiply = feedmultiply;
-			previous_millis_cmd = millis();
+		saved_feedrate = feedrate;
+		saved_feedmultiply = feedmultiply;
+		previous_millis_cmd = millis();
 
-			feedmultiply = 100;
+		feedmultiply = 100;
 
-			enable_endstops(true);
+		enable_endstops(true);
 
-			for (int i = 0; i < NUM_AXIS; i++) {
-				destination[i] = current_position[i];
-			}
-			feedrate = 0;
-			is_homing = true;
+		for (int i = 0; i < NUM_AXIS; i++) {
+			destination[i] = current_position[i];
+		}
+		feedrate = 0;
+		is_homing = true;
 
-			home_all_axis =
-					!((code_seen(axis_codes[0])) || (code_seen(axis_codes[1]))
-							|| (code_seen(axis_codes[2])));
+		home_all_axis =
+		!((code_seen(axis_codes[0])) || (code_seen(axis_codes[1]))
+			|| (code_seen(axis_codes[2])));
 
-			if ((home_all_axis) || (code_seen(axis_codes[X_AXIS])))
-				homing_routine(X_AXIS);
+		if ((home_all_axis) || (code_seen(axis_codes[X_AXIS])))
+			homing_routine(X_AXIS);
 
-			if ((home_all_axis) || (code_seen(axis_codes[Y_AXIS])))
-				homing_routine(Y_AXIS);
+		if ((home_all_axis) || (code_seen(axis_codes[Y_AXIS])))
+			homing_routine(Y_AXIS);
 
-			if ((home_all_axis) || (code_seen(axis_codes[Z_AXIS])))
-				homing_routine(Z_AXIS);
+		if ((home_all_axis) || (code_seen(axis_codes[Z_AXIS])))
+			homing_routine(Z_AXIS);
 
 #ifdef ENDSTOPS_ONLY_FOR_HOMING
-			enable_endstops(false);
+		enable_endstops(false);
 #endif
 
-			is_homing = false;
-			feedrate = saved_feedrate;
-			feedmultiply = saved_feedmultiply;
+		is_homing = false;
+		feedrate = saved_feedrate;
+		feedmultiply = saved_feedmultiply;
 
-			previous_millis_cmd = millis();
-			break;
+		previous_millis_cmd = millis();
+		break;
 		case 90: // G90
-			relative_mode = false;
-			break;
+		relative_mode = false;
+		break;
 		case 91: // G91
-			relative_mode = true;
-			break;
+		relative_mode = true;
+		break;
 		case 92: // G92
-			if (!code_seen(axis_codes[E_AXIS]))
-				st_synchronize();
+		if (!code_seen(axis_codes[E_AXIS]))
+			st_synchronize();
 
-			for (int i = 0; i < NUM_AXIS; i++) {
-				if (code_seen(axis_codes[i]))
-					current_position[i] = code_value();
-			}
-			plan_set_position(current_position[X_AXIS],
-					current_position[Y_AXIS], current_position[Z_AXIS],
-					current_position[E_AXIS]);
-			break;
+		for (int i = 0; i < NUM_AXIS; i++) {
+			if (code_seen(axis_codes[i]))
+				current_position[i] = code_value();
+		}
+		plan_set_position(current_position[X_AXIS],
+			current_position[Y_AXIS], current_position[Z_AXIS],
+			current_position[E_AXIS]);
+		break;
 		default:
 #ifdef SEND_WRONG_CMD_INFO
 			//showString(PSTR("Unknown G-COM:"));
 			//Serial.println(cmdbuffer[bufindr]);
-			printf("%s\r\n",cmdbuffer[bufindr]);
+		printf("%s\r\n",cmdbuffer[bufindr]);
 
 #endif
-			break;
-		}
+		break;
 	}
+}
 
-	else if (code_seen('M')) {
+else if (code_seen('M')) {
 
-		switch ((int) code_value()) {
+	switch ((int) code_value()) {
 #ifdef SDSUPPORT
 
 		case 20: // M20 - list SD card
@@ -1278,7 +1323,7 @@ FORCE_INLINE void process_commands() {
 			starpos = (strchr(strchr_pointer + 4,'*'));
 
 			if(starpos!=NULL)
-			*(starpos-1)='\0';
+				*(starpos-1)='\0';
 
 			if (file.open(&root, strchr_pointer + 4, O_READ))
 			{
@@ -1371,7 +1416,7 @@ FORCE_INLINE void process_commands() {
 			starpos = (strchr(strchr_pointer + 4,'*'));
 
 			if(starpos!=NULL)
-			*(starpos-1)='\0';
+				*(starpos-1)='\0';
 
 			if(file.remove(&root, strchr_pointer + 4))
 			{
@@ -1395,7 +1440,7 @@ FORCE_INLINE void process_commands() {
 
 #endif
 		case 42: //M42 -Change pin status via gcode
-			if (code_seen('S')) {
+		if (code_seen('S')) {
 #ifdef CHAIN_OF_COMMAND
 				st_synchronize(); // wait for all movements to finish
 #endif
@@ -1403,7 +1448,7 @@ FORCE_INLINE void process_commands() {
 				if (code_seen('P') && pin_status >= 0 && pin_status <= 255) {
 					int pin_number = code_value();
 					for (int i = 0; i < sizeof(sensitive_pins) / sizeof(int);
-							i++) {
+						i++) {
 						if (sensitive_pins[i] == pin_number) {
 							pin_number = -1;
 							break;
@@ -1422,35 +1467,35 @@ FORCE_INLINE void process_commands() {
 #ifdef CHAIN_OF_COMMAND
 		st_synchronize(); // wait for all movements to finish
 #endif
-			if (code_seen('S'))
-				target_raw = temp2analogh(target_temp = code_value());
+		if (code_seen('S'))
+			target_raw = temp2analogh(target_temp = code_value());
 #ifdef WATCHPERIOD
-			if(target_raw > current_raw)
-			{
-				watchmillis = max(1,millis());
-				watch_raw = current_raw;
-			}
-			else
-			{
-				watchmillis = 0;
-			}
+		if(target_raw > current_raw)
+		{
+			watchmillis = max(1,millis());
+			watch_raw = current_raw;
+		}
+		else
+		{
+			watchmillis = 0;
+		}
 #endif
-			break;
+		break;
 		case 140: // M140 set bed temp
 #ifdef CHAIN_OF_COMMAND
 		st_synchronize(); // wait for all movements to finish
 #endif
 #if TEMP_1_PIN > -1 || defined BED_USES_AD595
-			if (code_seen('S'))
-				target_bed_raw = temp2analogBed(code_value());
+		if (code_seen('S'))
+			target_bed_raw = temp2analogBed(code_value());
 #endif
-			break;
+		break;
 		case 105: // M105
 #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675)|| defined HEATER_USES_AD595
-			hotendtC = analog2temp(current_raw);
+		hotendtC = analog2temp(current_raw);
 #endif
 #if TEMP_1_PIN > -1 || defined BED_USES_AD595
-			bedtempC = analog2tempBed(current_bed_raw);
+		bedtempC = analog2tempBed(current_bed_raw);
 #endif
 #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675) || defined HEATER_USES_AD595
 			//showString(PSTR("ok T:"));
@@ -1468,7 +1513,7 @@ FORCE_INLINE void process_commands() {
 			 */
 #ifdef AUTOTEMP
 			//showString(PSTR(",AU:"));
-			Serial.print(autotemp_setpoint);
+		Serial.print(autotemp_setpoint);
 #endif
 #endif
 #if TEMP_1_PIN > -1 || defined BED_USES_AD595
@@ -1480,26 +1525,26 @@ FORCE_INLINE void process_commands() {
 #else
 #error No temperature source available
 #endif
-			return;
+		return;
 			//break;
 		case 109: { // M109 - Wait for extruder heater to reach target.
 #ifdef CHAIN_OF_COMMAND
 		st_synchronize(); // wait for all movements to finish
 #endif
-			if (code_seen('S'))
-				target_raw = temp2analogh(target_temp = code_value());
+		if (code_seen('S'))
+			target_raw = temp2analogh(target_temp = code_value());
 #ifdef WATCHPERIOD
-			if(target_raw>current_raw)
-			{
-				watchmillis = max(1,millis());
-				watch_raw = current_raw;
-			}
-			else
-			{
-				watchmillis = 0;
-			}
+		if(target_raw>current_raw)
+		{
+			watchmillis = max(1,millis());
+			watch_raw = current_raw;
+		}
+		else
+		{
+			watchmillis = 0;
+		}
 #endif
-			codenum = millis();
+		codenum = millis();
 
 			/* See if we are heating up or cooling down */
 			bool target_direction = (current_raw < target_raw); // true if heating, false if cooling
@@ -1510,13 +1555,13 @@ FORCE_INLINE void process_commands() {
 			/* continue to loop until we have reached the target temp
 			 _and_ until TEMP_RESIDENCY_TIME hasn't passed since we reached it */
 			while( (target_direction ? (current_raw < target_raw) : (current_raw > target_raw))
-					|| (residencyStart > -1 && (millis() - residencyStart) < TEMP_RESIDENCY_TIME*1000) ) {
+				|| (residencyStart > -1 && (millis() - residencyStart) < TEMP_RESIDENCY_TIME*1000) ) {
 #else
-			while (target_direction ?
+				while (target_direction ?
 					(current_raw < target_raw) : (current_raw > target_raw)) {
 #endif
 				if ((millis() - codenum) > 1000) //Print Temp Reading every 1 second while heating up/cooling down
-						{
+				{
 					//showString(PSTR("T:"));
 					//Serial.println( analog2temp(current_raw) );
 					codenum = millis();
@@ -1529,25 +1574,25 @@ FORCE_INLINE void process_commands() {
 				/* start/restart the TEMP_RESIDENCY_TIME timer whenever we reach target temp for the first time
 				 or when current temp falls outside the hysteresis after target temp was reached */
 				if ( (residencyStart == -1 && target_direction && current_raw >= target_raw)
-						|| (residencyStart == -1 && !target_direction && current_raw <= target_raw)
-						|| (residencyStart > -1 && labs(analog2temp(current_raw) - analog2temp(target_raw)) > TEMP_HYSTERESIS) ) {
+					|| (residencyStart == -1 && !target_direction && current_raw <= target_raw)
+					|| (residencyStart > -1 && labs(analog2temp(current_raw) - analog2temp(target_raw)) > TEMP_HYSTERESIS) ) {
 					residencyStart = millis();
-				}
-#endif
 			}
+#endif
 		}
-			break;
+	}
+	break;
 		case 190: // M190 - Wait for bed heater to reach target temperature.
 #ifdef CHAIN_OF_COMMAND
 		st_synchronize(); // wait for all movements to finish
 #endif
 #if TEMP_1_PIN > -1
-			if (code_seen('S'))
-				target_bed_raw = temp2analogBed(code_value());
-			codenum = millis();
-			while (current_bed_raw < target_bed_raw) {
+		if (code_seen('S'))
+			target_bed_raw = temp2analogBed(code_value());
+		codenum = millis();
+		while (current_bed_raw < target_bed_raw) {
 				if ((millis() - codenum) > 1000) //Print Temp Reading every 1 second while heating up.
-						{
+				{
 					hotendtC = analog2temp(current_raw);
 					//showString(PSTR("T:"));
 					//Serial.print(hotendtC);
@@ -1567,51 +1612,51 @@ FORCE_INLINE void process_commands() {
 #ifdef CHAIN_OF_COMMAND
 		st_synchronize(); // wait for all movements to finish
 #endif
-			if (code_seen('S')) {
-				unsigned char l_fan_code_val = constrain(code_value(), 0, 255);
+		if (code_seen('S')) {
+			unsigned char l_fan_code_val = constrain(code_value(), 0, 255);
 
 #if (MINIMUM_FAN_START_SPEED > 0)
-				if(l_fan_code_val > 0 && fan_last_speed == 0)
+			if(l_fan_code_val > 0 && fan_last_speed == 0)
+			{
+				if(l_fan_code_val < MINIMUM_FAN_START_SPEED)
 				{
-					if(l_fan_code_val < MINIMUM_FAN_START_SPEED)
-					{
-						fan_org_start_speed = l_fan_code_val;
-						l_fan_code_val = MINIMUM_FAN_START_SPEED;
-						previous_millis_fan_start = millis();
-					}
-					fan_last_speed = l_fan_code_val;
+					fan_org_start_speed = l_fan_code_val;
+					l_fan_code_val = MINIMUM_FAN_START_SPEED;
+					previous_millis_fan_start = millis();
 				}
-				else
-				{
-					fan_last_speed = l_fan_code_val;
-					fan_org_start_speed = 0;
-				}
-#endif
-
-#if defined(FAN_SOFT_PWM) && (FAN_PIN > -1)
-				g_fan_pwm_val = l_fan_code_val;
-#else
-				WRITE(FAN_PIN, HIGH);
-				analogWrite_check(FAN_PIN, l_fan_code_val;
-#endif
-
-			} else {
-#if defined(FAN_SOFT_PWM) && (FAN_PIN > -1)
-				g_fan_pwm_val = 255;
-#else
-				WRITE(FAN_PIN, HIGH);
-				analogWrite_check(FAN_PIN, 255 );
-#endif
+				fan_last_speed = l_fan_code_val;
 			}
-			break;
+			else
+			{
+				fan_last_speed = l_fan_code_val;
+				fan_org_start_speed = 0;
+			}
+#endif
+
+#if defined(FAN_SOFT_PWM) && (FAN_PIN > -1)
+			g_fan_pwm_val = l_fan_code_val;
+#else
+			WRITE(FAN_PIN, HIGH);
+			analogWrite_check(FAN_PIN, l_fan_code_val;
+#endif
+
+		} else {
+#if defined(FAN_SOFT_PWM) && (FAN_PIN > -1)
+			g_fan_pwm_val = 255;
+#else
+			WRITE(FAN_PIN, HIGH);
+			analogWrite_check(FAN_PIN, 255 );
+#endif
+		}
+		break;
 		case 107: //M107 Fan Off
 #if defined(FAN_SOFT_PWM) && (FAN_PIN > -1)
-			g_fan_pwm_val = 0;
+		g_fan_pwm_val = 0;
 #else
-			analogWrite_check(FAN_PIN, 0);
-			WRITE(FAN_PIN, LOW);
+		analogWrite_check(FAN_PIN, 0);
+		WRITE(FAN_PIN, LOW);
 #endif
-			break;
+		break;
 #endif
 #if (PS_ON_PIN > -1)
 			case 80: // M81 - ATX Power On
@@ -1624,13 +1669,13 @@ FORCE_INLINE void process_commands() {
 			SET_INPUT(PS_ON_PIN); //Floating
 			break;
 #endif
-		case 82:
+			case 82:
 			axis_relative_modes[3] = false;
 			break;
-		case 83:
+			case 83:
 			axis_relative_modes[3] = true;
 			break;
-		case 84:
+			case 84:
 			st_synchronize(); // wait for all movements to finish
 			if (code_seen('S')) {
 				stepper_inactive_time = code_value() * 1000;
@@ -1647,18 +1692,18 @@ FORCE_INLINE void process_commands() {
 			}
 			break;
 		case 85: // M85
-			code_seen('S');
-			max_inactive_time = code_value() * 1000;
-			break;
+		code_seen('S');
+		max_inactive_time = code_value() * 1000;
+		break;
 		case 92: // M92
-			for (int i = 0; i < NUM_AXIS; i++) {
-				if (code_seen(axis_codes[i])) {
-					axis_steps_per_unit[i] = code_value();
-					axis_steps_per_sqr_second[i] =
-							max_acceleration_units_per_sq_second[i]
-									* axis_steps_per_unit[i];
-				}
+		for (int i = 0; i < NUM_AXIS; i++) {
+			if (code_seen(axis_codes[i])) {
+				axis_steps_per_unit[i] = code_value();
+				axis_steps_per_sqr_second[i] =
+				max_acceleration_units_per_sq_second[i]
+				* axis_steps_per_unit[i];
 			}
+		}
 
 			// Update start speed intervals and axis order. TODO: refactor axis_max_interval[] calculation into a function, as it
 			// should also be used in setup() as well
@@ -1668,7 +1713,7 @@ FORCE_INLINE void process_commands() {
 //          axis_max_interval[i] = 100000000.0 / (max_start_speed_units_per_second[i] * axis_steps_per_unit[i]);//TODO: do this for
 //          all steps_per_unit related variables
 //        }
-			break;
+		break;
 		case 93: // M93 show current axis steps.
 			//showString(PSTR("ok "));
 			//showString(PSTR("X:"));
@@ -1679,13 +1724,13 @@ FORCE_INLINE void process_commands() {
 			//Serial.print(axis_steps_per_unit[2]);
 			//showString(PSTR("E:"));
 			//Serial.println(axis_steps_per_unit[3]);
-			break;
+		break;
 		case 115: // M115
 			//showString(PSTR("FIRMWARE_NAME: Sprinter Experimental PROTOCOL_VERSION:1.0 MACHINE_TYPE:Mendel EXTRUDER_COUNT:1\r\n"));
 			////Serial.println(uuid);
 			//showString(PSTR(_DEF_CHAR_UUID));
 			//showString(PSTR("\r\n"));
-			break;
+		break;
 		case 114: // M114
 			//showString(PSTR("X:"));
 		//	Serial.print(current_position[0]);
@@ -1695,7 +1740,7 @@ FORCE_INLINE void process_commands() {
 			//Serial.print(current_position[2]);
 			//showString(PSTR("E:"));
 			//Serial.println(current_position[3]);
-			break;
+		break;
 		case 119: // M119
 
 #if (X_MIN_PIN > -1)
@@ -1724,17 +1769,17 @@ FORCE_INLINE void process_commands() {
 #endif
 
 			//showString(PSTR("\r\n"));
-			break;
+		break;
 		case 201: // M201  Set maximum acceleration in units/s^2 for print moves (M201 X1000 Y1000)
 
-			for (int8_t i = 0; i < NUM_AXIS; i++) {
-				if (code_seen(axis_codes[i])) {
-					max_acceleration_units_per_sq_second[i] = code_value();
-					axis_steps_per_sqr_second[i] = code_value()
-							* axis_steps_per_unit[i];
-				}
+		for (int8_t i = 0; i < NUM_AXIS; i++) {
+			if (code_seen(axis_codes[i])) {
+				max_acceleration_units_per_sq_second[i] = code_value();
+				axis_steps_per_sqr_second[i] = code_value()
+				* axis_steps_per_unit[i];
 			}
-			break;
+		}
+		break;
 #if 0 // Not used for Sprinter/grbl gen6
 			case 202: // M202
 			for(int i=0; i < NUM_AXIS; i++)
@@ -1744,49 +1789,49 @@ FORCE_INLINE void process_commands() {
 			break;
 #else
 		case 202: // M202 max feedrate mm/sec
-			for (int8_t i = 0; i < NUM_AXIS; i++) {
-				if (code_seen(axis_codes[i]))
-					max_feedrate[i] = code_value();
-			}
-			break;
+		for (int8_t i = 0; i < NUM_AXIS; i++) {
+			if (code_seen(axis_codes[i]))
+				max_feedrate[i] = code_value();
+		}
+		break;
 #endif
 		case 203: // M203 Temperature monitor
-			if (code_seen('S'))
-				manage_monitor = code_value();
-			if (manage_monitor == 100)
+		if (code_seen('S'))
+			manage_monitor = code_value();
+		if (manage_monitor == 100)
 				manage_monitor = 1; // Set 100 to heated bed
 			break;
 		case 204: // M204 acceleration S normal moves T filmanent only moves
-			if (code_seen('S'))
-				move_acceleration = code_value();
-			if (code_seen('T'))
-				retract_acceleration = code_value();
-			break;
+		if (code_seen('S'))
+			move_acceleration = code_value();
+		if (code_seen('T'))
+			retract_acceleration = code_value();
+		break;
 		case 205: //M205 advanced settings:  minimum travel speed S=while printing T=travel only,  B=minimum segment time X= maximum xy jerk, Z=maximum Z jerk, E= max E jerk
-			if (code_seen('S'))
-				minimumfeedrate = code_value();
-			if (code_seen('T'))
-				mintravelfeedrate = code_value();
+		if (code_seen('S'))
+			minimumfeedrate = code_value();
+		if (code_seen('T'))
+			mintravelfeedrate = code_value();
 			//if(code_seen('B')) minsegmenttime = code_value() ;
-			if (code_seen('X'))
-				max_xy_jerk = code_value();
-			if (code_seen('Z'))
-				max_z_jerk = code_value();
-			if (code_seen('E'))
-				max_e_jerk = code_value();
-			break;
+		if (code_seen('X'))
+			max_xy_jerk = code_value();
+		if (code_seen('Z'))
+			max_z_jerk = code_value();
+		if (code_seen('E'))
+			max_e_jerk = code_value();
+		break;
 		case 206: // M206 additional homing offset
-			if (code_seen('D')) {
+		if (code_seen('D')) {
 				//showString(PSTR("Addhome X:")); Serial.print(add_homing[0]);
 				//showString(PSTR(" Y:")); Serial.print(add_homing[1]);
 				//showString(PSTR(" Z:")); //Serial.println(add_homing[2]);
-			}
+		}
 
-			for (int8_t cnt_i = 0; cnt_i < 3; cnt_i++) {
-				if (code_seen(axis_codes[cnt_i]))
-					add_homing[cnt_i] = code_value();
-			}
-			break;
+		for (int8_t cnt_i = 0; cnt_i < 3; cnt_i++) {
+			if (code_seen(axis_codes[cnt_i]))
+				add_homing[cnt_i] = code_value();
+		}
+		break;
 		case 220: // M220 S<factor in percent>- set speed factor override percentage
 		{
 			if (code_seen('S')) {
@@ -1795,7 +1840,7 @@ FORCE_INLINE void process_commands() {
 				feedmultiplychanged = true;
 			}
 		}
-			break;
+		break;
 		case 221: // M221 S<factor in percent>- set extrude factor override percentage
 		{
 			if (code_seen('S')) {
@@ -1803,7 +1848,7 @@ FORCE_INLINE void process_commands() {
 				extrudemultiply = constrain(extrudemultiply, 40, 200);
 			}
 		}
-			break;
+		break;
 #ifdef PIDTEMP
 		case 301: // M301
 		{
@@ -1815,7 +1860,7 @@ FORCE_INLINE void process_commands() {
 				PID_Kd = code_value();
 			updatePID();
 		}
-			break;
+		break;
 #endif //PIDTEMP      
 #ifdef PID_AUTOTUNE
 		case 303: // M303 PID autotune
@@ -1825,13 +1870,13 @@ FORCE_INLINE void process_commands() {
 				help_temp = code_value();
 			PID_autotune(help_temp);
 		}
-			break;
+		break;
 #endif
 		case 400: // M400 finish all moves
 		{
 			st_synchronize();
 		}
-			break;
+		break;
 #ifdef USE_EEPROM_SETTINGS
 			case 500: // Store settings in EEPROM
 			{
@@ -1866,9 +1911,9 @@ FORCE_INLINE void process_commands() {
 			case 601: // M601  show Extruder Temp jitter
 #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675)|| defined HEATER_USES_AD595
 			if(current_raw_maxval > 0)
-			tt_maxval = analog2temp(current_raw_maxval);
+				tt_maxval = analog2temp(current_raw_maxval);
 			if(current_raw_minval < 10000)
-			tt_minval = analog2temp(current_raw_minval);
+				tt_minval = analog2temp(current_raw_minval);
 #endif
 
 			//showString(PSTR("Tmin:"));
@@ -1887,22 +1932,22 @@ FORCE_INLINE void process_commands() {
 		case 603: // M603  Free RAM
 			//showString(PSTR("Free Ram: "));
 			//Serial.println(FreeRam1());
-			break;
+		break;
 		default:
 #ifdef SEND_WRONG_CMD_INFO
 			//showString(PSTR("Unknown M-COM:"));
 			//Serial.println(cmdbuffer[bufindr]);
 #endif
-			break;
+		break;
 
-		}
-
-	} else {
-		//showString(PSTR("Unknown command:\r\n"));
-		//Serial.println(cmdbuffer[bufindr]);
 	}
 
-	ClearToSend();
+} else {
+		//showString(PSTR("Unknown command:\r\n"));
+		//Serial.println(cmdbuffer[bufindr]);
+}
+
+ClearToSend();
 
 }
 
@@ -1918,7 +1963,7 @@ void ClearToSend() {
 	previous_millis_cmd = millis();
 #ifdef SDSUPPORT
 	if(fromsd[bufindr])
-	return;
+		return;
 #endif
 //  //showString(PSTR("ok\r\n"));
 	////Serial.println("ok");
@@ -1928,8 +1973,8 @@ FORCE_INLINE void get_coordinates() {
 	for (int i = 0; i < NUM_AXIS; i++) {
 		if (code_seen(axis_codes[i]))
 			destination[i] = (float) code_value()
-					+ (axis_relative_modes[i] || relative_mode)
-							* current_position[i];
+		+ (axis_relative_modes[i] || relative_mode)
+		* current_position[i];
 		else
 			destination[i] = current_position[i]; //Are these else lines really needed?
 	}
@@ -1990,7 +2035,7 @@ void prepare_move() {
 	}
 
 	plan_buffer_line(destination[X_AXIS], destination[Y_AXIS],
-			destination[Z_AXIS], destination[E_AXIS], help_feedrate / 6000.0);
+		destination[Z_AXIS], destination[E_AXIS], help_feedrate / 6000.0);
 
 	for (int i = 0; i < NUM_AXIS; i++) {
 		current_position[i] = destination[i];
@@ -2052,36 +2097,36 @@ FORCE_INLINE void manage_inactivity(byte debug) {
 		if (max_inactive_time)
 			kill();
 
-	if ((millis() - previous_millis_cmd) > stepper_inactive_time)
-		if (stepper_inactive_time) {
-			disable_x();
-			disable_y();
-			disable_z();
-			disable_e();
+		if ((millis() - previous_millis_cmd) > stepper_inactive_time)
+			if (stepper_inactive_time) {
+				disable_x();
+				disable_y();
+				disable_z();
+				disable_e();
+			}
+			check_axes_activity();
 		}
-	check_axes_activity();
-}
 
 #if (MINIMUM_FAN_START_SPEED > 0)
-void manage_fan_start_speed(void)
-{
-	if(fan_org_start_speed > 0)
-	{
-		if((millis() - previous_millis_fan_start) > MINIMUM_FAN_START_TIME )
+		void manage_fan_start_speed(void)
 		{
+			if(fan_org_start_speed > 0)
+			{
+				if((millis() - previous_millis_fan_start) > MINIMUM_FAN_START_TIME )
+				{
 #if FAN_PIN > -1
 #if defined(FAN_SOFT_PWM)
-			g_fan_pwm_val = fan_org_start_speed;
+					g_fan_pwm_val = fan_org_start_speed;
 #else
-			WRITE(FAN_PIN, HIGH);
-			analogWrite_check(FAN_PIN, fan_org_start_speed;
+					WRITE(FAN_PIN, HIGH);
+					analogWrite_check(FAN_PIN, fan_org_start_speed;
 #endif
 #endif
 
-					fan_org_start_speed = 0;
+						fan_org_start_speed = 0;
+					}
 				}
 			}
-		}
 #endif
 
 // Planner with Interrupt for Stepper
@@ -2153,10 +2198,10 @@ static unsigned char G92_reset_previous_speed = 0;
 // Calculates the distance (not time) it takes to accelerate from initial_rate to target_rate using the 
 // given acceleration:
 FORCE_INLINE float estimate_acceleration_distance(float initial_rate,
-		float target_rate, float acceleration) {
+	float target_rate, float acceleration) {
 	if (acceleration != 0) {
 		return ((target_rate * target_rate - initial_rate * initial_rate)
-				/ (2.0 * acceleration));
+			/ (2.0 * acceleration));
 	} else {
 		return 0.0;  // acceleration was 0, set acceleration distance to 0
 	}
@@ -2168,10 +2213,10 @@ FORCE_INLINE float estimate_acceleration_distance(float initial_rate,
 // deceleration in the cases where the trapezoid has no plateau (i.e. never reaches maximum speed)
 
 FORCE_INLINE float intersection_distance(float initial_rate, float final_rate,
-		float acceleration, float distance) {
+	float acceleration, float distance) {
 	if (acceleration != 0) {
 		return ((2.0 * acceleration * distance - initial_rate * initial_rate
-				+ final_rate * final_rate) / (4.0 * acceleration));
+			+ final_rate * final_rate) / (4.0 * acceleration));
 	} else {
 		return 0.0;  // acceleration was 0, set intersection distance to 0
 	}
@@ -2180,7 +2225,7 @@ FORCE_INLINE float intersection_distance(float initial_rate, float final_rate,
 // Calculates trapezoid parameters so that the entry- and exit-speed is compensated by the provided factors.
 
 void calculate_trapezoid_for_block(block_t *block, float entry_factor,
-		float exit_factor) {
+	float exit_factor) {
 	unsigned long initial_rate = ceil(block->nominal_rate * entry_factor); // (step/min)
 	unsigned long final_rate = ceil(block->nominal_rate * exit_factor); // (step/min)
 
@@ -2194,23 +2239,23 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor,
 
 	long acceleration = block->acceleration_st;
 	int32_t accelerate_steps = ceil(
-			estimate_acceleration_distance(block->initial_rate,
-					block->nominal_rate, acceleration));
+		estimate_acceleration_distance(block->initial_rate,
+			block->nominal_rate, acceleration));
 	int32_t decelerate_steps = floor(
-			estimate_acceleration_distance(block->nominal_rate,
-					block->final_rate, -acceleration));
+		estimate_acceleration_distance(block->nominal_rate,
+			block->final_rate, -acceleration));
 
 	// Calculate the size of Plateau of Nominal Rate.
 	int32_t plateau_steps = block->step_event_count - accelerate_steps
-			- decelerate_steps;
+	- decelerate_steps;
 
 	// Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
 	// have to use intersection_distance() to calculate when to abort acceleration and start breaking
 	// in order to reach the final_rate exactly at the end of this block.
 	if (plateau_steps < 0) {
 		accelerate_steps = ceil(
-				intersection_distance(block->initial_rate, block->final_rate,
-						acceleration, block->step_event_count));
+			intersection_distance(block->initial_rate, block->final_rate,
+				acceleration, block->step_event_count));
 		accelerate_steps = max(accelerate_steps, 0); // Check limits due to numerical round-off
 		accelerate_steps = min(accelerate_steps, block->step_event_count);
 		plateau_steps = 0;
@@ -2227,21 +2272,21 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor,
 	;  // Fill variables used by the stepper in a critical section
 	if (block->busy == false) { // Don't update variables if block is busy.
 		block->accelerate_until = accelerate_steps;
-		block->decelerate_after = accelerate_steps + plateau_steps;
-		block->initial_rate = initial_rate;
-		block->final_rate = final_rate;
+	block->decelerate_after = accelerate_steps + plateau_steps;
+	block->initial_rate = initial_rate;
+	block->final_rate = final_rate;
 #ifdef ADVANCE
-		block->initial_advance = initial_advance;
-		block->final_advance = final_advance;
+	block->initial_advance = initial_advance;
+	block->final_advance = final_advance;
 #endif //ADVANCE
-	}
+}
 //	CRITICAL_SECTION_END;
 }
 
 // Calculates the maximum allowable speed at this point when you must be able to reach target_velocity using the 
 // acceleration within the allotted distance.
 FORCE_INLINE float max_allowable_speed(float acceleration,
-		float target_velocity, float distance) {
+	float target_velocity, float distance) {
 	return sqrt(target_velocity * target_velocity - 2 * acceleration * distance);
 }
 
@@ -2255,7 +2300,7 @@ FORCE_INLINE float max_allowable_speed(float acceleration,
 
 // The kernel called by planner_recalculate() when scanning the plan from last to first entry.
 void planner_reverse_pass_kernel(block_t *previous, block_t *current,
-		block_t *next) {
+	block_t *next) {
 	if (!current) {
 		return;
 	}
@@ -2269,16 +2314,16 @@ void planner_reverse_pass_kernel(block_t *previous, block_t *current,
 			// If nominal length true, max junction speed is guaranteed to be reached. Only compute
 			// for max allowable speed if block is decelerating and nominal length is false.
 			if ((!current->nominal_length_flag)
-					&& (current->max_entry_speed > next->entry_speed)) {
+				&& (current->max_entry_speed > next->entry_speed)) {
 				current->entry_speed = min(current->max_entry_speed,
-						max_allowable_speed(-current->acceleration,
-								next->entry_speed, current->millimeters));
-			} else {
-				current->entry_speed = current->max_entry_speed;
-			}
-			current->recalculate_flag = true;
-
+					max_allowable_speed(-current->acceleration,
+						next->entry_speed, current->millimeters));
+		} else {
+			current->entry_speed = current->max_entry_speed;
 		}
+		current->recalculate_flag = true;
+
+	}
 	} // Skip last block. Already initialized and set for recalculation.
 }
 
@@ -2294,22 +2339,22 @@ void planner_reverse_pass() {
 	//CRITICAL_SECTION_END;
 
 	if (((block_buffer_head - tail + BLOCK_BUFFER_SIZE)
-			& (BLOCK_BUFFER_SIZE - 1)) > 3) {
+		& (BLOCK_BUFFER_SIZE - 1)) > 3) {
 		block_index = (block_buffer_head - 3) & (BLOCK_BUFFER_SIZE - 1);
-		block_t *block[3] = { NULL, NULL, NULL };
-		while (block_index != tail) {
-			block_index = prev_block_index(block_index);
-			block[2] = block[1];
-			block[1] = block[0];
-			block[0] = &block_buffer[block_index];
-			planner_reverse_pass_kernel(block[0], block[1], block[2]);
-		}
+	block_t *block[3] = { NULL, NULL, NULL };
+	while (block_index != tail) {
+		block_index = prev_block_index(block_index);
+		block[2] = block[1];
+		block[1] = block[0];
+		block[0] = &block_buffer[block_index];
+		planner_reverse_pass_kernel(block[0], block[1], block[2]);
 	}
+}
 }
 
 // The kernel called by planner_recalculate() when scanning the plan from first to last entry.
 void planner_forward_pass_kernel(block_t *previous, block_t *current,
-		block_t *next) {
+	block_t *next) {
 	if (!previous) {
 		return;
 	}
@@ -2321,8 +2366,8 @@ void planner_forward_pass_kernel(block_t *previous, block_t *current,
 	if (!previous->nominal_length_flag) {
 		if (previous->entry_speed < current->entry_speed) {
 			double entry_speed = min(current->entry_speed,
-					max_allowable_speed(-previous->acceleration,
-							previous->entry_speed, previous->millimeters));
+				max_allowable_speed(-previous->acceleration,
+					previous->entry_speed, previous->millimeters));
 
 			// Check for junction speed change
 			if (current->entry_speed != entry_speed) {
@@ -2365,8 +2410,8 @@ void planner_recalculate_trapezoids() {
 			if (current->recalculate_flag || next->recalculate_flag) {
 				// NOTE: Entry and exit factors always > 0 by all previous logic operations.
 				calculate_trapezoid_for_block(current,
-						current->entry_speed / current->nominal_speed,
-						next->entry_speed / current->nominal_speed);
+					current->entry_speed / current->nominal_speed,
+					next->entry_speed / current->nominal_speed);
 				current->recalculate_flag = false; // Reset current only to ensure next trapezoid is computed
 			}
 		}
@@ -2375,8 +2420,8 @@ void planner_recalculate_trapezoids() {
 	// Last/newest block in buffer. Exit speed is set with MINIMUM_PLANNER_SPEED. Always recalculated.
 	if (next != NULL) {
 		calculate_trapezoid_for_block(next,
-				next->entry_speed / next->nominal_speed,
-				MINIMUM_PLANNER_SPEED / next->nominal_speed);
+			next->entry_speed / next->nominal_speed,
+			MINIMUM_PLANNER_SPEED / next->nominal_speed);
 		next->recalculate_flag = false;
 	}
 }
@@ -2435,7 +2480,7 @@ FORCE_INLINE bool blocks_queued() {
 	if (block_buffer_head == block_buffer_tail) {
 		return false;
 	} else
-		return true;
+	return true;
 }
 
 void check_axes_activity() {
@@ -2514,7 +2559,9 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 	block->steps_e *= extrudemultiply;
 	block->steps_e /= 100;
 	block->step_event_count = max(block->steps_x,
-			max(block->steps_y, max(block->steps_z, block->steps_e)));
+		max(block->steps_y, max(block->steps_z, block->steps_e)));
+
+	printf("step x: %d, step y: %d, step z: %d, step e: %d\r\n", block->steps_x, block->steps_y, block->steps_z, block->steps_e);
 
 	// Bail if this is a zero-length block
 	if (block->step_event_count <= dropsegments) {
@@ -2589,7 +2636,7 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 
 	// slow down when the buffer starts to empty, rather than wait at the corner for a buffer refill
 	int moves_queued = (block_buffer_head - block_buffer_tail
-			+ BLOCK_BUFFER_SIZE) & (BLOCK_BUFFER_SIZE - 1);
+		+ BLOCK_BUFFER_SIZE) & (BLOCK_BUFFER_SIZE - 1);
 #ifdef SLOWDOWN  
 	if (moves_queued < (BLOCK_BUFFER_SIZE * 0.5) && moves_queued > 1)
 		feed_rate = feed_rate * moves_queued / (BLOCK_BUFFER_SIZE * 0.5);
@@ -2597,23 +2644,23 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 
 	float delta_mm[4];
 	delta_mm[X_AXIS] = (target[X_AXIS] - position[X_AXIS])
-			/ axis_steps_per_unit[X_AXIS];
+	/ axis_steps_per_unit[X_AXIS];
 	delta_mm[Y_AXIS] = (target[Y_AXIS] - position[Y_AXIS])
-			/ axis_steps_per_unit[Y_AXIS];
+	/ axis_steps_per_unit[Y_AXIS];
 	delta_mm[Z_AXIS] = (target[Z_AXIS] - position[Z_AXIS])
-			/ axis_steps_per_unit[Z_AXIS];
+	/ axis_steps_per_unit[Z_AXIS];
 	//delta_mm[E_AXIS] = (target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS];
 	delta_mm[E_AXIS] = ((target[E_AXIS] - position[E_AXIS])
-			/ axis_steps_per_unit[E_AXIS]) * extrudemultiply / 100.0;
+		/ axis_steps_per_unit[E_AXIS]) * extrudemultiply / 100.0;
 
 	if (block->steps_x <= dropsegments && block->steps_y <= dropsegments
-			&& block->steps_z <= dropsegments) {
+		&& block->steps_z <= dropsegments) {
 		block->millimeters = fabs(delta_mm[E_AXIS]);
-	} else {
-		block->millimeters = sqrt(
-				(delta_mm[X_AXIS] * delta_mm[X_AXIS]) + (delta_mm[Y_AXIS]*delta_mm[Y_AXIS])
-						+ (delta_mm[Z_AXIS]*delta_mm[Z_AXIS]));
-	}
+} else {
+	block->millimeters = sqrt(
+		(delta_mm[X_AXIS] * delta_mm[X_AXIS]) + (delta_mm[Y_AXIS]*delta_mm[Y_AXIS])
+		+ (delta_mm[Z_AXIS]*delta_mm[Z_AXIS]));
+}
 
 	float inverse_millimeters = 1.0 / block->millimeters; // Inverse millimeters to remove multiple divides
 
@@ -2644,13 +2691,13 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 		current_speed[i] = delta_mm[i] * inverse_second;
 		if (fabs(current_speed[i]) > max_feedrate[i])
 			speed_factor = min(speed_factor,
-					max_feedrate[i] / fabs(current_speed[i]));
+				max_feedrate[i] / fabs(current_speed[i]));
 	}
 
 	current_speed[E_AXIS] = delta_mm[E_AXIS] * inverse_second;
 	if (fabs(current_speed[E_AXIS]) > max_E_feedrate_calc)
 		speed_factor = min(speed_factor,
-				max_E_feedrate_calc / fabs(current_speed[E_AXIS]));
+			max_E_feedrate_calc / fabs(current_speed[E_AXIS]));
 
 	// Correct the speed
 	if (speed_factor < 1.0) {
@@ -2669,25 +2716,25 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 		block->acceleration_st = ceil(move_acceleration * steps_per_mm); // convert to: acceleration steps/sec^2
 		// Limit acceleration per axis
 		if (((float) block->acceleration_st * (float) block->steps_x
-				/ (float) block->step_event_count)
-				> axis_steps_per_sqr_second[X_AXIS])
+			/ (float) block->step_event_count)
+			> axis_steps_per_sqr_second[X_AXIS])
 			block->acceleration_st = axis_steps_per_sqr_second[X_AXIS];
 		if (((float) block->acceleration_st * (float) block->steps_y
-				/ (float) block->step_event_count)
-				> axis_steps_per_sqr_second[Y_AXIS])
+			/ (float) block->step_event_count)
+			> axis_steps_per_sqr_second[Y_AXIS])
 			block->acceleration_st = axis_steps_per_sqr_second[Y_AXIS];
 		if (((float) block->acceleration_st * (float) block->steps_e
-				/ (float) block->step_event_count)
-				> axis_steps_per_sqr_second[E_AXIS])
+			/ (float) block->step_event_count)
+			> axis_steps_per_sqr_second[E_AXIS])
 			block->acceleration_st = axis_steps_per_sqr_second[E_AXIS];
 		if (((float) block->acceleration_st * (float) block->steps_z
-				/ (float) block->step_event_count)
-				> axis_steps_per_sqr_second[Z_AXIS])
+			/ (float) block->step_event_count)
+			> axis_steps_per_sqr_second[Z_AXIS])
 			block->acceleration_st = axis_steps_per_sqr_second[Z_AXIS];
 	}
 	block->acceleration = block->acceleration_st / steps_per_mm;
 	block->acceleration_rate =
-			(long) ((float) block->acceleration_st * 8.388608);
+	(long) ((float) block->acceleration_st * 8.388608);
 
 #if 0  // Use old jerk for now
 	// Compute path unit vector
@@ -2749,9 +2796,9 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 
 	if ((moves_queued > 1) && (previous_nominal_speed > 0.0001)) {
 		float jerk = sqrt(
-				pow((current_speed[X_AXIS] - previous_speed[X_AXIS]), 2)
-						+ pow((current_speed[Y_AXIS] - previous_speed[Y_AXIS]),
-								2));
+			pow((current_speed[X_AXIS] - previous_speed[X_AXIS]), 2)
+			+ pow((current_speed[Y_AXIS] - previous_speed[Y_AXIS]),
+				2));
 		//    if((fabs(previous_speed[X_AXIS]) > 0.0001) || (fabs(previous_speed[Y_AXIS]) > 0.0001)) {
 		vmax_junction = block->nominal_speed;
 		//    }
@@ -2760,13 +2807,13 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 		}
 		if (fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS]) > max_z_jerk) {
 			vmax_junction_factor =
-					min(vmax_junction_factor,
-							(max_z_jerk/fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS])));
+			min(vmax_junction_factor,
+				(max_z_jerk/fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS])));
 		}
 		if (fabs(current_speed[E_AXIS] - previous_speed[E_AXIS]) > max_e_jerk) {
 			vmax_junction_factor =
-					min(vmax_junction_factor,
-							(max_e_jerk/fabs(current_speed[E_AXIS] - previous_speed[E_AXIS])));
+			min(vmax_junction_factor,
+				(max_e_jerk/fabs(current_speed[E_AXIS] - previous_speed[E_AXIS])));
 		}
 		vmax_junction = min(previous_nominal_speed,
 				vmax_junction * vmax_junction_factor); // Limit speed to max previous speed
@@ -2775,7 +2822,7 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 
 	// Initialize block entry speed. Compute based on deceleration to user-defined MINIMUM_PLANNER_SPEED.
 	double v_allowable = max_allowable_speed(-block->acceleration,
-			MINIMUM_PLANNER_SPEED, block->millimeters);
+		MINIMUM_PLANNER_SPEED, block->millimeters);
 	block->entry_speed = min(vmax_junction, v_allowable);
 
 	// Initialize planner efficiency flags
@@ -2819,8 +2866,8 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 #endif // ADVANCE
 
 	calculate_trapezoid_for_block(block,
-			block->entry_speed / block->nominal_speed,
-			safe_speed / block->nominal_speed);
+		block->entry_speed / block->nominal_speed,
+		safe_speed / block->nominal_speed);
 
 	// Move buffer head
 	block_buffer_head = next_buffer_head;
@@ -2837,7 +2884,7 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 
 int calc_plannerpuffer_fill(void) {
 	int moves_queued = (block_buffer_head - block_buffer_tail
-			+ BLOCK_BUFFER_SIZE) & (BLOCK_BUFFER_SIZE - 1);
+		+ BLOCK_BUFFER_SIZE) & (BLOCK_BUFFER_SIZE - 1);
 	return (moves_queued);
 }
 
@@ -2865,41 +2912,41 @@ void getHighESpeed()
 {
 	static float oldt=0;
 	if(!autotemp_enabled)
-	return;
+		return;
 	if((target_temp+2) < autotemp_min) //probably temperature set to zero.
 	return;//do nothing
 
-	float high=0.0;
-	uint8_t block_index = block_buffer_tail;
+float high=0.0;
+uint8_t block_index = block_buffer_tail;
 
-	while(block_index != block_buffer_head) {
-		if((block_buffer[block_index].steps_x != 0) ||
-				(block_buffer[block_index].steps_y != 0) ||
-				(block_buffer[block_index].steps_z != 0)) {
-			float se=(float(block_buffer[block_index].steps_e)/float(block_buffer[block_index].step_event_count))*block_buffer[block_index].nominal_speed;
+while(block_index != block_buffer_head) {
+	if((block_buffer[block_index].steps_x != 0) ||
+		(block_buffer[block_index].steps_y != 0) ||
+		(block_buffer[block_index].steps_z != 0)) {
+		float se=(float(block_buffer[block_index].steps_e)/float(block_buffer[block_index].step_event_count))*block_buffer[block_index].nominal_speed;
 			//se; units steps/sec;
-			if(se>high)
-			{
-				high=se;
-			}
-		}
-		block_index = (block_index+1) & (BLOCK_BUFFER_SIZE - 1);
+	if(se>high)
+	{
+		high=se;
 	}
+}
+block_index = (block_index+1) & (BLOCK_BUFFER_SIZE - 1);
+}
 
-	float t=autotemp_min+high*autotemp_factor;
+float t=autotemp_min+high*autotemp_factor;
 
-	if(t<autotemp_min)
+if(t<autotemp_min)
 	t=autotemp_min;
 
-	if(t>autotemp_max)
+if(t>autotemp_max)
 	t=autotemp_max;
 
-	if(oldt>t)
-	{
-		t=AUTOTEMP_OLDWEIGHT*oldt+(1-AUTOTEMP_OLDWEIGHT)*t;
-	}
-	oldt=t;
-	autotemp_setpoint = (int)t;
+if(oldt>t)
+{
+	t=AUTOTEMP_OLDWEIGHT*oldt+(1-AUTOTEMP_OLDWEIGHT)*t;
+}
+oldt=t;
+autotemp_setpoint = (int)t;
 
 }
 #endif
@@ -2912,24 +2959,24 @@ void getHighESpeed()
 // r27 to store the byte 1 of the 24 bit result
 #define MultiU16X8toH16(intRes, charIn1, intIn2) \
 asm volatile ( \
-"clr r26 \n\t" \
-"mul %A1, %B2 \n\t" \
-"movw %A0, r0 \n\t" \
-"mul %A1, %A2 \n\t" \
-"add %A0, r1 \n\t" \
-"adc %B0, r26 \n\t" \
-"lsr r0 \n\t" \
-"adc %A0, r26 \n\t" \
-"adc %B0, r26 \n\t" \
-"clr r1 \n\t" \
-: \
-"=&r" (intRes) \
-: \
-"d" (charIn1), \
-"d" (intIn2) \
-: \
-"r26" \
-)
+	"clr r26 \n\t" \
+	"mul %A1, %B2 \n\t" \
+	"movw %A0, r0 \n\t" \
+	"mul %A1, %A2 \n\t" \
+	"add %A0, r1 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"lsr r0 \n\t" \
+	"adc %A0, r26 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"clr r1 \n\t" \
+	: \
+	"=&r" (intRes) \
+	: \
+	"d" (charIn1), \
+	"d" (intIn2) \
+	: \
+	"r26" \
+	)
 
 // intRes = longIn1 * longIn2 >> 24
 // uses:
@@ -2937,44 +2984,44 @@ asm volatile ( \
 // r27 to store the byte 1 of the 48bit result
 #define MultiU24X24toH16(intRes, longIn1, longIn2) \
 asm volatile ( \
-"clr r26 \n\t" \
-"mul %A1, %B2 \n\t" \
-"mov r27, r1 \n\t" \
-"mul %B1, %C2 \n\t" \
-"movw %A0, r0 \n\t" \
-"mul %C1, %C2 \n\t" \
-"add %B0, r0 \n\t" \
-"mul %C1, %B2 \n\t" \
-"add %A0, r0 \n\t" \
-"adc %B0, r1 \n\t" \
-"mul %A1, %C2 \n\t" \
-"add r27, r0 \n\t" \
-"adc %A0, r1 \n\t" \
-"adc %B0, r26 \n\t" \
-"mul %B1, %B2 \n\t" \
-"add r27, r0 \n\t" \
-"adc %A0, r1 \n\t" \
-"adc %B0, r26 \n\t" \
-"mul %C1, %A2 \n\t" \
-"add r27, r0 \n\t" \
-"adc %A0, r1 \n\t" \
-"adc %B0, r26 \n\t" \
-"mul %B1, %A2 \n\t" \
-"add r27, r1 \n\t" \
-"adc %A0, r26 \n\t" \
-"adc %B0, r26 \n\t" \
-"lsr r27 \n\t" \
-"adc %A0, r26 \n\t" \
-"adc %B0, r26 \n\t" \
-"clr r1 \n\t" \
-: \
-"=&r" (intRes) \
-: \
-"d" (longIn1), \
-"d" (longIn2) \
-: \
-"r26" , "r27" \
-)
+	"clr r26 \n\t" \
+	"mul %A1, %B2 \n\t" \
+	"mov r27, r1 \n\t" \
+	"mul %B1, %C2 \n\t" \
+	"movw %A0, r0 \n\t" \
+	"mul %C1, %C2 \n\t" \
+	"add %B0, r0 \n\t" \
+	"mul %C1, %B2 \n\t" \
+	"add %A0, r0 \n\t" \
+	"adc %B0, r1 \n\t" \
+	"mul %A1, %C2 \n\t" \
+	"add r27, r0 \n\t" \
+	"adc %A0, r1 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"mul %B1, %B2 \n\t" \
+	"add r27, r0 \n\t" \
+	"adc %A0, r1 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"mul %C1, %A2 \n\t" \
+	"add r27, r0 \n\t" \
+	"adc %A0, r1 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"mul %B1, %A2 \n\t" \
+	"add r27, r1 \n\t" \
+	"adc %A0, r26 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"lsr r27 \n\t" \
+	"adc %A0, r26 \n\t" \
+	"adc %B0, r26 \n\t" \
+	"clr r1 \n\t" \
+	: \
+	"=&r" (intRes) \
+	: \
+	"d" (longIn1), \
+	"d" (longIn2) \
+	: \
+	"r26" , "r27" \
+	)
 
 // Some useful constants
 
@@ -2992,7 +3039,7 @@ static block_t *current_block;  // A pointer to the block currently being traced
 // Variables used by The Stepper Driver Interrupt
 static unsigned char out_bits;        // The next stepping-bits to be output
 static long counter_x,       // Counter variables for the bresenham line tracer
-		counter_y, counter_z, counter_e;
+counter_y, counter_z, counter_e;
 static unsigned long step_events_completed; // The number of step events executed in the current block
 #ifdef ADVANCE
 static long advance_rate, advance, final_advance = 0;
@@ -3032,11 +3079,17 @@ static bool old_z_max_endstop = false;
 //  step_events_completed reaches block->decelerate_after after which it decelerates until the trapezoid generator is reset.
 //  The slope of acceleration is calculated with the leib ramp alghorithm.
 
+void enable_stepper_driver_interrupt(){
+
+}
+
 void st_wake_up() {
 	//  TCNT1 = 0;
-	//if (busy == false)
-		//ENABLE_STEPPER_DRIVER_INTERRUPT();
+	if (busy == false)
+		enable_stepper_driver_interrupt();
+		// ENABLE_STEPPER_DRIVER_INTERRUPT();
 }
+
 
 FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
 	unsigned short timer;
@@ -3059,15 +3112,15 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
 
 	if (step_rate >= (8 * 256)) // higher step rate
 			{ // higher step rate
-		unsigned short table_address =
+				unsigned short table_address =
 				(uint32_t) &speed_lookuptable_fast[(unsigned char) (step_rate	>> 8)][0];
-		unsigned char tmp_step_rate = (step_rate & 0x00ff);
+				unsigned char tmp_step_rate = (step_rate & 0x00ff);
 //		unsigned short gain = (unsigned short) pgm_read_word_near(table_address + 2);
 	//	MultiU16X8toH16(timer, tmp_step_rate, gain);
 	//	timer = (unsigned short) pgm_read_word_near(table_address) - timer;
 	} else { // lower step rates
 		unsigned short table_address =
-				(uint32_t) &speed_lookuptable_slow[0][0];
+		(uint32_t) &speed_lookuptable_slow[0][0];
 		table_address += ((step_rate) >> 1) & 0xfffc;
 		//timer = (unsigned short) pgm_read_word_near(table_address);
 		//timer -= (((unsigned short) pgm_read_word_near(table_address + 2)
@@ -3443,7 +3496,212 @@ else if (e_steps > 0) {
 */
 #endif // ADVANCE
 
+void step(){
+	_TGL(shields_data , STEP_X_PIN);
+	XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+}
+
+void BTN_Intr_Handler(void *InstancePtr) {
+	// Disable GPIO interrupts
+	print(" Button Interrupt \n \r ");
+	print("\r\n");
+	print("\r\n");
+
+	XGpio_InterruptDisable(&BTNInst, BTN_INT);
+	// Ignore additional button presses
+	if ((XGpio_InterruptGetStatus(&BTNInst) & BTN_INT) != BTN_INT) {
+		return;
+	}
+
+	btn_value = XGpio_DiscreteRead(&BTNInst, 1);
+	switch (btn_value){
+	case 0b001:
+		_TGL(shields_data , STEP_X_PIN);
+		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+		break;
+	case 0b010:
+		_TGL(shields_data , STEP_Y_PIN);
+		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+		break;
+	case 0b100:
+		_TGL(shields_data , STEP_Z_PIN);
+		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+		break;
+	}
+	XGpio_DiscreteWrite(&LEDInst, 1, btn_value);
+	(void) XGpio_InterruptClear(&BTNInst, BTN_INT);
+
+	// Enable GPIO interrupts
+	XGpio_InterruptEnable(&BTNInst, BTN_INT);
+}
+
+XScuGic InterruptController; /* Instance of the Interrupt Controller */
+static XScuGic_Config *GicConfig;/* The configuration parameters of the
+controller */
+
+//void print(char *str);
+extern char inbyte(void);
+void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
+{
+//	print(" Interrupt acknowledged \n \r ");
+//	print("\r\n");
+//	print("\r\n");
+	intr_cntr++;
+	if(pulse_status==0){
+		if(intr_cntr>500) {
+			step();
+			pulse_status = 1;
+			intr_cntr = 0;
+		}
+	} else {
+		step();
+		pulse_status = 0;
+	}
+
+//	XTmrCtr_Stop(data,TmrCtrNumber);
+//	XTmrCtr_Reset(data,TmrCtrNumber);
+//	XTmrCtr_Start(data,TmrCtrNumber);
+
+}
+
+
+int SetUpInterruptSystem(XScuGic *XScuGicInstancePtr)
+{
+	/*
+	 * Connect the interrupt controller interrupt handler to the hardware
+	 * interrupt handling logic in the ARM processor.
+	 */
+	XGpio_InterruptEnable(&BTNInst, BTN_INT);
+	XGpio_InterruptGlobalEnable(&BTNInst);
+
+	Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
+			(Xil_ExceptionHandler) XScuGic_InterruptHandler,
+			XScuGicInstancePtr);
+	/*
+	 * Enable interrupts in the ARM
+	 */
+	Xil_ExceptionEnable();
+	return XST_SUCCESS;
+}
+
+int ScuGicInterrupt_Init(u16 DeviceId,XTmrCtr *TimerInstancePtr)
+{
+	int Status;
+	/*
+	 * Initialize the interrupt controller driver so that it is ready to
+	 * use.
+	 * */
+	GicConfig = XScuGic_LookupConfig(DeviceId);
+	if (NULL == GicConfig) {
+		return XST_FAILURE;
+	}
+	Status = XScuGic_CfgInitialize(&InterruptController, GicConfig,
+			GicConfig->CpuBaseAddress);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+	/*
+	 * Setup the Interrupt System
+	 * */
+	Status = SetUpInterruptSystem(&InterruptController);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+	/*
+	 * Connect a device driver handler that will be called when an
+	 * interrupt for the device occurs, the device driver handler performs
+	 * the specific interrupt processing for the device
+	 */
+	Status = XScuGic_Connect(&InterruptController,
+			XPAR_FABRIC_AXI_TIMER_0_INTERRUPT_INTR,
+			(Xil_ExceptionHandler)XTmrCtr_InterruptHandler,
+			(void *)TimerInstancePtr);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+
+	Status = XScuGic_Connect(&InterruptController,
+			XPAR_FABRIC_BUTTONS_IP2INTC_IRPT_INTR,
+				(Xil_ExceptionHandler) BTN_Intr_Handler,
+				(void *) &BTNInst);
+		if (Status != XST_SUCCESS)
+			return XST_FAILURE;
+
+		// Enable GPIO interrupts interrupt
+		XGpio_InterruptEnable(&BTNInst, 1);
+		XGpio_InterruptGlobalEnable(&BTNInst);
+
+	/*
+	 * Enable the interrupt for the device and then cause (simulate) an
+	 * interrupt so the handlers will be called
+	 */
+	XScuGic_Enable(&InterruptController, XPAR_FABRIC_AXI_TIMER_0_INTERRUPT_INTR);
+	XScuGic_Enable(&InterruptController, XPAR_FABRIC_BUTTONS_IP2INTC_IRPT_INTR);
+	return XST_SUCCESS;
+}
+
+void initSteppers(){
+ //no use of enable pin
+	//	_CLR(shields_data , X_EN_PIN);
+//	XGpio_SetDataDirection(&ShieldInst, 1, 0x00);
+
+}
+
+void initializeGPIO(){
+	int xStatus;
+	shields_data = 0;
+	// Initialise LEDs
+	xStatus = XGpio_Initialize(&LEDInst, LEDS_DEVICE_ID);
+	if (xStatus != XST_SUCCESS)
+		// return XST_FAILURE;
+		return;
+	// Initialise Push Buttons
+	xStatus = XGpio_Initialize(&BTNInst, BTNS_DEVICE_ID);
+	if (xStatus != XST_SUCCESS)
+		// return XST_FAILURE;
+		return;
+	xStatus = XGpio_Initialize(&ShieldInst, SHIELDS_DEVICE_ID);
+	if (xStatus != XST_SUCCESS)
+		// return XST_FAILURE;
+		return;
+	// Set LEDs direction to outputs
+	XGpio_SetDataDirection(&LEDInst, 1, 0x00);
+	XGpio_SetDataDirection(&BTNInst, 1, 0xFF);
+	XGpio_SetDataDirection(&ShieldInst, 1, 0x00);
+}
+
+void initializeAxiTimer(){
+	XTmrCtr TimerInstancePtr;
+
+	print("##### Timer initialization start. #####\n\r");
+	print("\r\n");
+	int xStatus = XTmrCtr_Initialize(&TimerInstancePtr,XPAR_AXI_TIMER_0_DEVICE_ID);
+	if(XST_SUCCESS != xStatus)
+		print("TIMER INIT FAILED \n\r");
+
+	XTmrCtr_SetHandler(&TimerInstancePtr,
+			Timer_InterruptHandler,
+			&TimerInstancePtr);
+
+	XTmrCtr_SetResetValue(&TimerInstancePtr,
+			0, //Change with generic value
+			0xffffff37);
+			//			0xf8000000);
+
+	XTmrCtr_SetOptions(&TimerInstancePtr,
+			XPAR_AXI_TIMER_0_DEVICE_ID,
+			(XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION ));
+
+	xStatus=ScuGicInterrupt_Init(XPAR_PS7_SCUGIC_0_DEVICE_ID,&TimerInstancePtr);
+	if(XST_SUCCESS != xStatus)
+		print(" :( SCUGIC INIT FAILED \n\r");
+
+	XTmrCtr_Start(&TimerInstancePtr,0);
+	print("timer start \n\r");
+}
+
 void st_init() {
+
 /*
 	// waveform generation = 0100 = CTC
 TCCR1B &= ~(1 << WGM13);
@@ -3487,13 +3745,13 @@ sei();
 
 // Block until all buffered steps are executed
 void st_synchronize() {
-while (blocks_queued()) {
-manage_heater();
-manage_inactivity(1);
+	while (blocks_queued()) {
+		manage_heater();
+		manage_inactivity(1);
 #if (MINIMUM_FAN_START_SPEED > 0)
-manage_fan_start_speed();
+		manage_fan_start_speed();
 #endif
-}
+	}
 }
 
 #ifdef DEBUG
@@ -3527,46 +3785,46 @@ void log_ulong(char* message, unsigned long value) {
 
 void log_int_array(char* message, int value[], int array_lenght) {
 //Serial.print("DEBUG"); Serial.print(message); Serial.print(": {");
-for(int i=0; i < array_lenght; i++) {
+	for(int i=0; i < array_lenght; i++) {
 //Serial.print(value[i]);
-if(i != array_lenght-1) Serial.print(", ");
-}
+		if(i != array_lenght-1) Serial.print(", ");
+	}
  //Serial.println("}");
 }
 
 void log_long_array(char* message, long value[], int array_lenght) {
 //Serial.print("DEBUG"); Serial.print(message); Serial.print(": {");
-for(int i=0; i < array_lenght; i++) {
+	for(int i=0; i < array_lenght; i++) {
 //Serial.print(value[i]);
-if(i != array_lenght-1) Serial.print(", ");
-}
+		if(i != array_lenght-1) Serial.print(", ");
+	}
  //Serial.println("}");
 }
 
 void log_float_array(char* message, float value[], int array_lenght) {
 //Serial.print("DEBUG"); Serial.print(message); Serial.print(": {");
-for(int i=0; i < array_lenght; i++) {
-Serial.print(value[i]);
-if(i != array_lenght-1) Serial.print(", ");
-}
+	for(int i=0; i < array_lenght; i++) {
+		Serial.print(value[i]);
+		if(i != array_lenght-1) Serial.print(", ");
+	}
  //Serial.println("}");
 }
 
 void log_uint_array(char* message, unsigned int value[], int array_lenght) {
 //Serial.print("DEBUG"); Serial.print(message); Serial.print(": {");
-for(int i=0; i < array_lenght; i++) {
+	for(int i=0; i < array_lenght; i++) {
 //Serial.print(value[i]);
-if(i != array_lenght-1) Serial.print(", ");
-}
+		if(i != array_lenght-1) Serial.print(", ");
+	}
  //Serial.println("}");
 }
 
 void log_ulong_array(char* message, unsigned long value[], int array_lenght) {
 //Serial.print("DEBUG"); Serial.print(message); Serial.print(": {");
-for(int i=0; i < array_lenght; i++) {
+	for(int i=0; i < array_lenght; i++) {
 //Serial.print(value[i]);
-if(i != array_lenght-1) Serial.print(", ");
-}
+		if(i != array_lenght-1) Serial.print(", ");
+	}
  //Serial.println("}");
 }
 #endif

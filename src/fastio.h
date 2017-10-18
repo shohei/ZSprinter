@@ -94,139 +94,141 @@
 pins
 */
 
+#define ADDR_TEMP 0x100000
+
 #define DIO0_PIN		0
-#define DIO0_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO0_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO0_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO0_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO0_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO0_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO0_PWM		NULL
 
 #define DIO1_PIN	     1
-#define DIO1_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO1_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO1_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO1_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO1_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO1_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO1_PWM		NULL
 
 #define DIO2_PIN		2
-#define DIO2_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO2_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO2_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO2_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO2_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO2_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO2_PWM		NULL
 
 #define DIO3_PIN		3
-#define DIO3_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO3_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO3_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO3_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO3_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO3_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO3_PWM		&OCR2B
 
 //#define DIO4_PIN		PIND4
 #define DIO4_PIN		4
-#define DIO4_RPORT	 (*(volatile uint8_t *)(0x00))
-#define DIO4_WPORT	 (*(volatile uint8_t *)(0x00))
-#define DIO4_DDR	 (*(volatile uint8_t *)(0x00))
+#define DIO4_RPORT	 (*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO4_WPORT	 (*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO4_DDR	 (*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO4_PWM		NULL
 
 #define DIO5_PIN		5
-#define DIO5_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO5_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO5_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO5_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO5_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO5_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO5_PWM		&OCR0B
 
 #define DIO6_PIN		6
-#define DIO6_RPORT	(*(volatile uint8_t *)(0x00))
+#define DIO6_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
 //#define DIO6_WPORT	PORTD
-#define DIO6_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO6_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO6_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO6_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO6_PWM		&OCR0A
 
 #define DIO7_PIN		7
-#define DIO7_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO7_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO7_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO7_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO7_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO7_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO7_PWM		NULL
 
 #define DIO8_PIN	8
-#define DIO8_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO8_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO8_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO8_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO8_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO8_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO8_PWM		NULL
 
 #define DIO9_PIN		9
-#define DIO9_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO9_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO9_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO9_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO9_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO9_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO9_PWM		NULL
 
 #define DIO10_PIN		10
-#define DIO10_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO10_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO10_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO10_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO10_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO10_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO10_PWM		NULL
 
 #define DIO11_PIN		11
-#define DIO11_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO11_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO11_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO11_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO11_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO11_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO11_PWM		&OCR2A
 
 #define DIO12_PIN		12
-#define DIO12_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO12_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO12_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO12_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO12_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO12_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO12_PWM		NULL
 
 #define DIO13_PIN		13
-#define DIO13_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO13_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO13_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO13_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO13_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO13_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO13_PWM		NULL
 
 
 #define DIO14_PIN		14
-#define DIO14_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO14_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO14_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO14_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO14_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO14_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO14_PWM		NULL
 
 #define DIO15_PIN		15
-#define DIO15_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO15_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO15_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO15_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO15_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO15_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO15_PWM		NULL
 
 #define DIO16_PIN		16
-#define DIO16_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO16_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO16_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO16_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO16_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO16_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO16_PWM		NULL
 
 #define DIO17_PIN		17
-#define DIO17_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO17_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO17_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO17_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO17_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO17_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO17_PWM		NULL
 
 #define DIO18_PIN		18
-#define DIO18_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO18_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO18_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO18_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO18_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO18_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO18_PWM		NULL
 
 #define DIO19_PIN		19
-#define DIO19_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO19_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO19_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO19_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO19_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO19_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO19_PWM		NULL
 
 #define DIO20_PIN		20
-#define DIO20_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO20_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO20_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO20_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO20_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO20_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO20_PWM		NULL
 
 #define DIO21_PIN		21
-#define DIO21_RPORT	(*(volatile uint8_t *)(0x00))
-#define DIO21_WPORT	(*(volatile uint8_t *)(0x00))
-#define DIO21_DDR		(*(volatile uint8_t *)(0x00))
+#define DIO21_RPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO21_WPORT	(*(volatile uint8_t *)(ADDR_TEMP))
+#define DIO21_DDR		(*(volatile uint8_t *)(ADDR_TEMP))
 #define DIO21_PWM		NULL
 
 
