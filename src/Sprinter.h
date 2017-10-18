@@ -117,6 +117,10 @@ void st_wake_up();
 void st_synchronize();
 void st_set_position(const long &x, const long &y, const long &z, const long &e);
 
+//function prototypes
+void initializeGPIO();
+void initializeAxiTimer();
+
 void check_buffer_while_arc();
 
 #ifdef SDSUPPORT
