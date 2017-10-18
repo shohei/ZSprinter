@@ -218,10 +218,6 @@ void __cxa_pure_virtual() {
 }
 ;
 
-//function prototypes
-void initializeGPIO();
-void initializeAxiTimer();
-
 
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
 // http://objects.reprap.org/wiki/Mendel_User_Manual:_RepRapGCodes
@@ -889,48 +885,52 @@ void setup() {
 
 #endif
 
-#if defined(PID_SOFT_PWM) || (defined(FAN_SOFT_PWM) && (FAN_PIN > -1))
-	showString("Soft PWM Init\r\n");
-	init_Timer2_softpwm();
-#endif
+// #if defined(PID_SOFT_PWM) || (defined(FAN_SOFT_PWM) && (FAN_PIN > -1))
+// 	showString("Soft PWM Init\r\n");
+// 	init_Timer2_softpwm();
+// #endif
 
-	showString("Planner Init\r\n");
-	plan_init();  // Initialize planner;
+// 	showString("Planner Init\r\n");
+// 	plan_init();  // Initialize planner;
 
-	showString("Stepper Timer init\r\n");
-	st_init();    // Initialize stepper
+// 	showString("Stepper Timer init\r\n");
+// 	st_init();    // Initialize stepper
 
-#ifdef USE_EEPROM_SETTINGS
-	//first Value --> Init with default
-	//second value --> Print settings to UART
-	EEPROM_RetrieveSettings(false,false);
-#endif
+// #ifdef USE_EEPROM_SETTINGS
+// 	//first Value --> Init with default
+// 	//second value --> Print settings to UART
+// 	EEPROM_RetrieveSettings(false,false);
+// #endif
 
-#ifdef PIDTEMP
-	updatePID();
-#endif
+// #ifdef PIDTEMP
+// 	updatePID();
+// #endif
 
 	//Free Ram
-	showString("Free Ram: ");
+	// showString("Free Ram: ");
  //Serial.println(FreeRam1());
 
 	//Planner Buffer Size
-	showString("Plan Buffer Size:");
-	printf("%d\r\n",(int)sizeof(block_t)*BLOCK_BUFFER_SIZE);
-	showString(" / ");
-	printf("%d\r\n",BLOCK_BUFFER_SIZE);
+	// showString("Plan Buffer Size:");
+	// printf("%d\r\n",(int)sizeof(block_t)*BLOCK_BUFFER_SIZE);
+	// showString(" / ");
+	// printf("%d\r\n",BLOCK_BUFFER_SIZE);
 
 	for (int8_t i = 0; i < NUM_AXIS; i++) {
 		axis_steps_per_sqr_second[i] = max_acceleration_units_per_sq_second[i]
 		* axis_steps_per_unit[i];
 	}
+/*
+*/
 
 }
 
 //------------------------------------------------
 //MAIN LOOP
 //------------------------------------------------
+
 void loop() {
+	/*
 	if (buflen < (BUFSIZE - 1))
 		get_command();
 
@@ -974,6 +974,7 @@ void loop() {
 	manage_fan_start_speed();
 #endif
 
+*/
 }
 
 //------------------------------------------------
@@ -3686,7 +3687,7 @@ void initializeAxiTimer(){
 	XTmrCtr_SetResetValue(&TimerInstancePtr,
 			0, //Change with generic value
 			0xffffff37);
-			//			0xf8000000);
+			//0xf8000000);
 
 	XTmrCtr_SetOptions(&TimerInstancePtr,
 			XPAR_AXI_TIMER_0_DEVICE_ID,
