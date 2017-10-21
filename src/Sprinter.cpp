@@ -86,7 +86,7 @@
  - Add info to GEN7 Pins
  - Update pins.h for gen7, working setup for 20MHz
  - calculate feedrate without extrude before planner block is set
- - New Board --> GEN7 @ 20 Mhz Åc
+ - New Board --> GEN7 @ 20 Mhz ÔøΩ
  - ENDSTOPS_ONLY_FOR_HOMING Option ignore Endstop always --> fault is cleared
 
  Version 1.3.11T
@@ -120,7 +120,7 @@
  - G4 Wait until last move is done
 
  Version 1.3.18T
- - Problem with Thermistor 3 table when sensor is broken and temp is -20 ÅãC
+ - Problem with Thermistor 3 table when sensor is broken and temp is -20 ÔΩ∞C
 
  Version 1.3.19T
  - Set maximum acceleration. If "steps per unit" is Change the acc were not recalculated
@@ -194,8 +194,10 @@ static int btn_value;
 static int shields_data;
 static int intr_cntr;
 static int pulse_status = 0;
+static XTmrCtr TimerInstancePtr;
 
-#define F_CPU 650000000
+// #define F_CPU 650000000
+#define F_CPU 16000000
 
 #ifdef USE_ARC_FUNCTION
 #include "arc_func.h"
@@ -411,7 +413,7 @@ int serial_count = 0;
 boolean comment_mode = false;
 char *strchr_pointer; // just a pointer to find chars in the cmd string like X, Y, Z, E, etc
 
-//Send Temperature in ÅãC to Host
+//Send Temperature in ÔΩ∞C to Host
 int hotendtC = 0, bedtempC = 0;
 
 //Inactivity shutdown variables
@@ -930,7 +932,6 @@ void setup() {
 //------------------------------------------------
 
 void loop() {
-	/*
 	if (buflen < (BUFSIZE - 1))
 		get_command();
 
@@ -974,7 +975,6 @@ void loop() {
 	manage_fan_start_speed();
 #endif
 
-*/
 }
 
 //------------------------------------------------
@@ -3148,9 +3148,9 @@ FORCE_INLINE void trapezoid_generator_reset() {
 	// step_rate to timer interval
 	acc_step_rate = current_block->initial_rate;
 	acceleration_time = calc_timer(acc_step_rate);
-//	OCR1A = acceleration_time;
-	//OCR1A_nominal = calc_timer(current_block->nominal_rate);
-
+	//TODO: 
+	// OCR1A = acceleration_time;
+	OCR1A_nominal = calc_timer(current_block->nominal_rate);
 }
 
 // "The Stepper Driver Interrupt" - This timer interrupt is the workhorse.  
@@ -3516,15 +3516,15 @@ void BTN_Intr_Handler(void *InstancePtr) {
 
 	btn_value = XGpio_DiscreteRead(&BTNInst, 1);
 	switch (btn_value){
-	case 0b001:
+		case 0b001:
 		_TGL(shields_data , STEP_X_PIN);
 		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
 		break;
-	case 0b010:
+		case 0b010:
 		_TGL(shields_data , STEP_Y_PIN);
 		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
 		break;
-	case 0b100:
+		case 0b100:
 		_TGL(shields_data , STEP_Z_PIN);
 		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
 		break;
@@ -3547,6 +3547,7 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
 //	print(" Interrupt acknowledged \n \r ");
 //	print("\r\n");
 //	print("\r\n");
+	/*
 	intr_cntr++;
 	if(pulse_status==0){
 		if(intr_cntr>500) {
@@ -3558,11 +3559,420 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
 		step();
 		pulse_status = 0;
 	}
+	*/
 
 //	XTmrCtr_Stop(data,TmrCtrNumber);
 //	XTmrCtr_Reset(data,TmrCtrNumber);
 //	XTmrCtr_Start(data,TmrCtrNumber);
 
+	  // If there is no current block, attempt to pop one from the buffer
+	if (current_block == NULL) {
+    // Anything in the buffer?
+		current_block = plan_get_current_block();
+		if (current_block != NULL) {
+			trapezoid_generator_reset();
+			counter_x = -(current_block->step_event_count >> 1);
+			counter_y = counter_x;
+			counter_z = counter_x;
+			counter_e = counter_x;
+			step_events_completed = 0;
+//      #ifdef ADVANCE
+//      e_steps = 0;
+//      #endif
+		} 
+		else {
+        	// OCR1A=2000; // 1kHz.
+        	XTmrCtr_SetResetValue(&TimerInstancePtr,
+			                      0, //Change with generic value
+			                      2000*50); //1kHz
+			                     //0xf8000000);
+        }    
+	}
+
+	if (current_block != NULL) {
+    // Set directions TO DO This should be done once during init of trapezoid. Endstops -> interrupt
+		out_bits = current_block->direction_bits;
+
+    // Set direction and check limit switches
+    if ((out_bits & (1<<X_AXIS)) != 0) {   // -direction
+    	if(INVERT_X_DIR){
+	      _SET(shields_data , DIR_X_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	} else {
+	      _CLR(shields_data , DIR_X_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	    }
+    	// WRITE(X_DIR_PIN, INVERT_X_DIR);
+    	CHECK_ENDSTOPS
+
+    	{
+        #if X_MIN_PIN > -1
+    		// bool x_min_endstop=(READ(X_MIN_PIN)!= X_ENDSTOP_INVERT);
+    		int x_min_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MIN_PIN);
+    		bool x_min_endstop= (x_min_pin_read != X_ENDSTOP_INVERT);
+    		if(x_min_endstop && old_x_min_endstop && (current_block->steps_x > 0)) {
+    			if(!is_homing)
+    				endstop_x_hit=true;
+    			else  
+    				step_events_completed = current_block->step_event_count;
+    		}
+    		else
+    		{
+    			endstop_x_hit=false;
+    		}
+    		old_x_min_endstop = x_min_endstop;
+        #else
+    		endstop_x_hit=false;
+        #endif
+    	}
+    }
+    else { // +direction 
+    	if(INVERT_X_DIR){
+	      _CLR(shields_data , DIR_X_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	} else {
+	      _SET(shields_data , DIR_X_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	    }
+    	// WRITE(X_DIR_PIN, !INVERT_X_DIR);
+    	CHECK_ENDSTOPS
+    	{
+        #if X_MAX_PIN > -1
+    		int x_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MAX_PIN):
+    		bool x_max_endstop=( x_max_pin_read != X_ENDSTOP_INVERT);
+    		// bool x_max_endstop=(READ(X_MAX_PIN) != X_ENDSTOP_INVERT);
+    		if(x_max_endstop && old_x_max_endstop && (current_block->steps_x > 0)){
+    			if(!is_homing)
+    				endstop_x_hit=true;
+    			else    
+    				step_events_completed = current_block->step_event_count;
+    		}
+    		else
+    		{
+    			endstop_x_hit=false;
+    		}
+    		old_x_max_endstop = x_max_endstop;
+        #else
+    		endstop_x_hit=false;
+        #endif
+    	}
+    }
+
+    if ((out_bits & (1<<Y_AXIS)) != 0) {   // -direction
+    	if(INVERT_Y_DIR){
+	      _SET(shields_data , DIR_Y_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	} else {
+	      _CLR(shields_data , DIR_Y_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	    }
+    	// WRITE(Y_DIR_PIN, INVERT_Y_DIR);
+    	CHECK_ENDSTOPS
+    	{
+        #if Y_MIN_PIN > -1
+    		int y_min_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Y_MIN_PIN);
+    		bool y_min_endstop=( y_min_pin_read != Y_ENDSTOP_INVERT);
+    		// bool y_min_endstop=(READ(Y_MIN_PIN)!= Y_ENDSTOP_INVERT);
+    		if(y_min_endstop && old_y_min_endstop && (current_block->steps_y > 0)) {
+    			if(!is_homing)
+    				endstop_y_hit=true;
+    			else
+    				step_events_completed = current_block->step_event_count;
+    		}
+    		else
+    		{
+    			endstop_y_hit=false;
+    		}
+    		old_y_min_endstop = y_min_endstop;
+        #else
+    		endstop_y_hit=false;  
+        #endif
+    	}
+    }
+    else { // +direction
+    	if(INVERT_Y_DIR){
+	      _CLR(shields_data , DIR_Y_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	} else {
+	      _SET(shields_data , DIR_Y_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	    }
+    	// WRITE(Y_DIR_PIN, !INVERT_Y_DIR);
+    	CHECK_ENDSTOPS
+    	{
+        #if Y_MAX_PIN > -1
+    		int y_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Y_MAX_PIN):
+    		bool y_max_endstop=( y_max_pin_read != Y_ENDSTOP_INVERT);
+    		// bool y_max_endstop=(READ(Y_MAX_PIN) != Y_ENDSTOP_INVERT);
+    		// bool y_max_endstop=(READ(Y_MAX_PIN) != Y_ENDSTOP_INVERT);
+    		if(y_max_endstop && old_y_max_endstop && (current_block->steps_y > 0)){
+    			if(!is_homing)
+    				endstop_y_hit=true;
+    			else  
+    				step_events_completed = current_block->step_event_count;
+    		}
+    		else
+    		{
+    			endstop_y_hit=false;
+    		}
+    		old_y_max_endstop = y_max_endstop;
+        #else
+    		endstop_y_hit=false;  
+        #endif
+    	}
+    }
+
+    if ((out_bits & (1<<Z_AXIS)) != 0) {   // -direction
+    	if(INVERT_Z_DIR){
+	      _SET(shields_data , DIR_Z_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	} else {
+	      _CLR(shields_data , DIR_Z_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	    }
+    	// WRITE(Z_DIR_PIN, INVERT_Z_DIR);
+    	CHECK_ENDSTOPS
+    	{
+        #if Z_MIN_PIN > -1
+    		int z_min_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Z_MIN_PIN);
+    		bool z_min_endstop=( z_min_pin_read != Z_ENDSTOP_INVERT);
+    		// bool z_min_endstop=(READ(Z_MIN_PIN)!= Z_ENDSTOP_INVERT);
+    		if(z_min_endstop && old_z_min_endstop && (current_block->steps_z > 0)) {
+    			if(!is_homing)  
+    				endstop_z_hit=true;
+    			else  
+    				step_events_completed = current_block->step_event_count;
+    		}
+    		else
+    		{
+    			endstop_z_hit=false;
+    		}
+    		old_z_min_endstop = z_min_endstop;
+        #else
+    		endstop_z_hit=false;  
+        #endif
+    	}
+    }
+    else { // +direction
+    	if(INVERT_Z_DIR){
+	      _CLR(shields_data , DIR_Z_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	} else {
+	      _SET(shields_data , DIR_Z_PIN);
+	      XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	    }
+    	// WRITE(Z_DIR_PIN, !INVERT_Z_DIR);
+    	CHECK_ENDSTOPS
+    	{
+        #if Z_MAX_PIN > -1
+    		int z_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Z_MAX_PIN):
+    		bool z_max_endstop=( z_max_pin_read != Z_ENDSTOP_INVERT);
+    		// bool z_max_endstop=(READ(Z_MAX_PIN) != Z_ENDSTOP_INVERT);
+    		if(z_max_endstop && old_z_max_endstop && (current_block->steps_z > 0)) {
+    			if(!is_homing)
+    				endstop_z_hit=true;
+    			else  
+    				step_events_completed = current_block->step_event_count;
+    		}
+    		else
+    		{
+    			endstop_z_hit=false;
+    		}
+    		old_z_max_endstop = z_max_endstop;
+        #else
+    		endstop_z_hit=false;  
+        #endif
+    	}
+    }
+
+    #ifndef ADVANCE
+  //    if ((out_bits & (1<<E_AXIS)) != 0) {  // -direction
+      	// WRITE(E_DIR_PIN, INVERT_E_DIR);}
+//	    _CLR(shields_data , DIR_E_PIN);
+//	    XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+//      else { // +direction
+      	// WRITE(E_DIR_PIN, !INVERT_E_DIR);}
+//	    _SET(shields_data , DIR_E_PIN);
+//	    XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    #endif //!ADVANCE
+
+
+
+    for(int8_t i=0; i < step_loops; i++) { // Take multiple steps per interrupt (For high speed moves) 
+
+      #ifdef ADVANCE
+    	counter_e += current_block->steps_e;
+    	if (counter_e > 0) {
+    		counter_e -= current_block->step_event_count;
+        if ((out_bits & (1<<E_AXIS)) != 0) { // - direction
+        	e_steps--;
+        }
+        else {
+        	e_steps++;
+        }
+        }    
+      #endif //ADVANCE
+
+
+    counter_x += current_block->steps_x;
+    if (counter_x > 0) {
+    	if(!endstop_x_hit)
+    	{
+    		if(virtual_steps_x)
+    			virtual_steps_x--;
+    		else {
+    			// WRITE(X_STEP_PIN, HIGH);}
+	          _SET(shields_data , STEP_X_PIN);
+	          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);}
+         } else
+    		virtual_steps_x++;
+
+    		counter_x -= current_block->step_event_count;
+    		// WRITE(X_STEP_PIN, LOW);
+	          _CLR(shields_data , STEP_X_PIN);
+	          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    	  }
+
+    		counter_y += current_block->steps_y;
+    		if (counter_y > 0) {
+    			if(!endstop_y_hit)
+    			{
+    				if(virtual_steps_y)
+    					virtual_steps_y--;
+    				else {
+    					// WRITE(Y_STEP_PIN, HIGH);}
+	                  _SET(shields_data , STEP_Y_PIN);
+	                  XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);}
+    				}
+    			else
+    				virtual_steps_y++;
+
+    				counter_y -= current_block->step_event_count;
+    				// WRITE(Y_STEP_PIN, LOW);
+	                _CLR(shields_data , STEP_Y_PIN);
+	                XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    			}
+
+    				counter_z += current_block->steps_z;
+    				if (counter_z > 0) {
+    					if(!endstop_z_hit)
+    					{
+    						if(virtual_steps_z)
+    							virtual_steps_z--;
+    						else {
+    							// WRITE(Z_STEP_PIN, HIGH);}
+	                          _SET(shields_data , STEP_Z_PIN);
+	                          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);}
+    					}
+    					else
+    						virtual_steps_z++;
+
+    						counter_z -= current_block->step_event_count;
+    						// WRITE(Z_STEP_PIN, LOW);
+	                          _CLR(shields_data , STEP_Z_PIN);
+	                          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    					}
+
+      #ifndef ADVANCE
+    						counter_e += current_block->steps_e;
+    						if (counter_e > 0) {
+    							// WRITE(E_STEP_PIN, HIGH);
+//	                            _SET(shields_data , STEP_E_PIN);
+//	                            XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+
+    							counter_e -= current_block->step_event_count;
+    							// WRITE(E_STEP_PIN, LOW);
+//	                            _CLR(shields_data , STEP_E_PIN);
+//	                            XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+    						}
+      #endif //!ADVANCE
+
+    							step_events_completed += 1;  
+    							if(step_events_completed >= current_block->step_event_count) break;
+
+    						}
+    // Calculare new timer value
+    						unsigned short timer;
+    						unsigned short step_rate;
+    						//while acceleration
+    						if (step_events_completed <= (unsigned long int)current_block->accelerate_until) {
+
+    							// MultiU24X24toH16(acc_step_rate, acceleration_time, current_block->acceleration_rate);
+    							acc_step_rate = (acceleration_time * current_block->acceleration_rate) >> 24;
+    							acc_step_rate += current_block->initial_rate;
+
+      // upper limit
+    							if(acc_step_rate > current_block->nominal_rate)
+    								acc_step_rate = current_block->nominal_rate;
+
+      // step_rate to timer interval
+    							timer = calc_timer(acc_step_rate);
+    							// OCR1A = timer;
+	                            XTmrCtr_SetResetValue(&TimerInstancePtr,
+			                                          0, //Change with generic value
+			                                           timer*50); //(OCR1A=2000) => 1kHz. 100MHz(FPGA)/2MHz(Mega2560 pre-scaled)=50. 
+    							acceleration_time += timer;
+      #ifdef ADVANCE
+    							for(int8_t i=0; i < step_loops; i++) {
+    								advance += advance_rate;
+    							}
+        //if(advance > current_block->advance) advance = current_block->advance;
+        // Do E steps + advance steps
+    							e_steps += ((advance >>8) - old_advance);
+    							old_advance = advance >>8;  
+
+      #endif
+    						} 
+    						//while deceleration
+    						else if (step_events_completed > (unsigned long int)current_block->decelerate_after) {   
+    							// MultiU24X24toH16(step_rate, deceleration_time, current_block->acceleration_rate);
+    							step_rate = (deceleration_time * current_block->acceleration_rate) >> 24;
+
+if(step_rate > acc_step_rate) { // Check step_rate stays positive
+	step_rate = current_block->final_rate;
+}
+else {
+	step_rate = acc_step_rate - step_rate; // Decelerate from aceleration end point.
+}
+
+// lower limit
+if(step_rate < current_block->final_rate)
+	step_rate = current_block->final_rate;
+
+// step_rate to timer interval
+timer = calc_timer(step_rate);
+// OCR1A = timer;
+XTmrCtr_SetResetValue(&TimerInstancePtr,
+                       0, //Change with generic value
+                       timer*50); //(OCR1A=2000) => 1kHz. 100MHz(FPGA)/2MHz(Mega2560 pre-scaled)=50. 
+deceleration_time += timer;
+
+#ifdef ADVANCE
+for(int8_t i=0; i < step_loops; i++) {
+	advance -= advance_rate;
+}
+if(advance < final_advance) 
+	advance = final_advance;
+// Do E steps + advance steps
+e_steps += ((advance >>8) - old_advance);
+old_advance = advance >>8;
+#endif //ADVANCE
+
+}
+//while plateau slew rate
+else {
+	//OCR1A = OCR1A_nominal;
+    XTmrCtr_SetResetValue(&TimerInstancePtr,
+                          0, //Change with generic value
+                          OCR1A_nominal*50); 
+}
+
+ // If current block is finished, reset pointer
+if (step_events_completed >= current_block->step_event_count) {
+	current_block = NULL;
+	plan_discard_current_block();
+}
+}
 }
 
 
@@ -3576,8 +3986,8 @@ int SetUpInterruptSystem(XScuGic *XScuGicInstancePtr)
 	XGpio_InterruptGlobalEnable(&BTNInst);
 
 	Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
-			(Xil_ExceptionHandler) XScuGic_InterruptHandler,
-			XScuGicInstancePtr);
+		(Xil_ExceptionHandler) XScuGic_InterruptHandler,
+		XScuGicInstancePtr);
 	/*
 	 * Enable interrupts in the ARM
 	 */
@@ -3597,7 +4007,7 @@ int ScuGicInterrupt_Init(u16 DeviceId,XTmrCtr *TimerInstancePtr)
 		return XST_FAILURE;
 	}
 	Status = XScuGic_CfgInitialize(&InterruptController, GicConfig,
-			GicConfig->CpuBaseAddress);
+		GicConfig->CpuBaseAddress);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
@@ -3614,23 +4024,23 @@ int ScuGicInterrupt_Init(u16 DeviceId,XTmrCtr *TimerInstancePtr)
 	 * the specific interrupt processing for the device
 	 */
 	Status = XScuGic_Connect(&InterruptController,
-			XPAR_FABRIC_AXI_TIMER_0_INTERRUPT_INTR,
-			(Xil_ExceptionHandler)XTmrCtr_InterruptHandler,
-			(void *)TimerInstancePtr);
+		XPAR_FABRIC_AXI_TIMER_0_INTERRUPT_INTR,
+		(Xil_ExceptionHandler)XTmrCtr_InterruptHandler,
+		(void *)TimerInstancePtr);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
 
 	Status = XScuGic_Connect(&InterruptController,
-			XPAR_FABRIC_BUTTONS_IP2INTC_IRPT_INTR,
-				(Xil_ExceptionHandler) BTN_Intr_Handler,
-				(void *) &BTNInst);
-		if (Status != XST_SUCCESS)
-			return XST_FAILURE;
+		XPAR_FABRIC_BUTTONS_IP2INTC_IRPT_INTR,
+		(Xil_ExceptionHandler) BTN_Intr_Handler,
+		(void *) &BTNInst);
+	if (Status != XST_SUCCESS)
+		return XST_FAILURE;
 
 		// Enable GPIO interrupts interrupt
-		XGpio_InterruptEnable(&BTNInst, 1);
-		XGpio_InterruptGlobalEnable(&BTNInst);
+	XGpio_InterruptEnable(&BTNInst, 1);
+	XGpio_InterruptGlobalEnable(&BTNInst);
 
 	/*
 	 * Enable the interrupt for the device and then cause (simulate) an
@@ -3644,7 +4054,7 @@ int ScuGicInterrupt_Init(u16 DeviceId,XTmrCtr *TimerInstancePtr)
 void initSteppers(){
  //no use of enable pin
 	//	_CLR(shields_data , X_EN_PIN);
-//	XGpio_SetDataDirection(&ShieldInst, 1, 0x00);
+	// XGpio_SetDataDirection(&ShieldInst, 1, 0x00);
 
 }
 
@@ -3672,7 +4082,6 @@ void initializeGPIO(){
 }
 
 void initializeAxiTimer(){
-	XTmrCtr TimerInstancePtr;
 
 	print("##### Timer initialization start. #####\n\r");
 	print("\r\n");
@@ -3681,17 +4090,18 @@ void initializeAxiTimer(){
 		print("TIMER INIT FAILED \n\r");
 
 	XTmrCtr_SetHandler(&TimerInstancePtr,
-			Timer_InterruptHandler,
-			&TimerInstancePtr);
+		Timer_InterruptHandler,
+		&TimerInstancePtr);
 
 	XTmrCtr_SetResetValue(&TimerInstancePtr,
 			0, //Change with generic value
-			0xffffff37);
+			2000*50); //(OCR1A=2000) => 1kHz. 100MHz(FPGA)/2MHz(Mega2560 pre-scaled)=50. 
+			//Therefore, (2000*50) => 1kHz on AXI timer. Whatever times 50 makes AXI timer value.
 			//0xf8000000);
 
 	XTmrCtr_SetOptions(&TimerInstancePtr,
-			XPAR_AXI_TIMER_0_DEVICE_ID,
-			(XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION ));
+		XPAR_AXI_TIMER_0_DEVICE_ID,
+		(XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION | XTC_DOWN_COUNT_OPTION));
 
 	xStatus=ScuGicInterrupt_Init(XPAR_PS7_SCUGIC_0_DEVICE_ID,&TimerInstancePtr);
 	if(XST_SUCCESS != xStatus)
