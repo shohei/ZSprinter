@@ -2979,6 +2979,30 @@ asm volatile ( \
 	"r26" \
 	)
 
+uint16_t MultiU16X8toH16_emulation(uint8_t charIn1, uint16_t intIn2){
+	uint8_t r26 = 0;
+	uint8_t a0,b0;    // output
+	uint8_t a1,a2,b2; //input
+	a1 = charIn1;
+	a2 = intIn2;
+    b2 = intIn2 >> 8;
+    uint16_t r1r0 = (uint16_t)a1*(uint16_t)b2;
+    uint8_t r1 = r1r0 >> 8;
+    uint8_t r0 = r1r0;
+    a0 = r0;
+    r1r0 = (int)a1*(int)a2;
+    r1 = r1r0 >> 8;
+    // r0 = r1r0; //not needed
+    a0 = a0 + r1;
+    b0 = r26;
+    // r0 = r0 >> 1; //not needed
+    // a0 = a0 + r26; //this does nothing
+    // b0 = b0 + r26; //this does nothing
+    // r1 = 0; //not needed
+    uint16_t result = (b0<<8) + a0;
+    return result;
+}
+
 // intRes = longIn1 * longIn2 >> 24
 // uses:
 // r26 to store 0
@@ -3023,6 +3047,11 @@ asm volatile ( \
 	: \
 	"r26" , "r27" \
 	)
+
+
+uint16_t MultiU24X24toH16_emulation(uint32_t longIn1, uint32_t longIn2){
+
+}
 
 // Some useful constants
 
