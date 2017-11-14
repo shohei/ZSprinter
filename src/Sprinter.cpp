@@ -3231,19 +3231,22 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
 
 	if (step_rate >= (8 * 256)) // higher step rate
 			{ // higher step rate
-				unsigned short table_address =
-				(uint32_t) &speed_lookuptable_fast[(unsigned char) (step_rate	>> 8)][0];
+				// unsigned short table_address = (uint32_t) &speed_lookuptable_fast[(unsigned char) (step_rate	>> 8)][0];
 				unsigned char tmp_step_rate = (step_rate & 0x00ff);
-//		unsigned short gain = (unsigned short) pgm_read_word_near(table_address + 2);
+		// unsigned short gain = (unsigned short) pgm_read_word_near(table_address + 2);
+				unsigned short gain = (unsigned short) speed_lookuptable_fast[(unsigned char) (step_rate	>> 8)][1];
 	//	MultiU16X8toH16(timer, tmp_step_rate, gain);
-	//	timer = (unsigned short) pgm_read_word_near(table_address) - timer;
+				timer = MultiU16X8toH16_emulation(tmp_step_rate, gain);
+		// timer = (unsigned short) pgm_read_word_near(table_address) - timer;
+				timer = (unsigned short) speed_lookuptable_fast[(unsigned char) (step_rate	>> 8)][0] - timer;
 	} else { // lower step rates
-		unsigned short table_address =
-		(uint32_t) &speed_lookuptable_slow[0][0];
-		table_address += ((step_rate) >> 1) & 0xfffc;
-		//timer = (unsigned short) pgm_read_word_near(table_address);
-		//timer -= (((unsigned short) pgm_read_word_near(table_address + 2)
-			//	* (unsigned char) (step_rate & 0x0007)) >> 3);
+		// unsigned short table_address = (uint32_t) &speed_lookuptable_slow[0][0];
+		// table_address += ((step_rate) >> 1) & 0xfffc;
+		unsigned short table_index = (((step_rate) >> 1) & 0xfffc) / 4;
+		// timer = (unsigned short) pgm_read_word_near(table_address);
+		timer = (unsigned short) speed_lookuptable_slow[table_index][0];
+		//timer -= (((unsigned short) pgm_read_word_near(table_address + 2) * (unsigned char) (step_rate & 0x0007)) >> 3);
+		timer -= (((unsigned short) speed_lookuptable_slow[table_index][1] * (unsigned char) (step_rate & 0x0007)) >> 3);
 	}
 	if (timer < 100) {
 		timer = 100;
@@ -3266,10 +3269,20 @@ FORCE_INLINE void trapezoid_generator_reset() {
 	// step_rate to timer interval
 	acc_step_rate = current_block->initial_rate;
 	acceleration_time = calc_timer(acc_step_rate);
-	//TODO: 
 	// OCR1A = acceleration_time;
+	XTmrCtr_SetResetValue(&TimerInstancePtr,
+			0, //Change with generic value
+			acceleration_time*50); //(OCR1A=2000) => 1kHz. 100MHz(FPGA)/2MHz(Mega2560 pre-scaled)=50.
 	OCR1A_nominal = calc_timer(current_block->nominal_rate);
 }
+
+void wait_for_1_8us(){
+	/* NOP inserted:So that high time is 1.8us approximately */
+  for(int i=0;i<100;i++){
+	asm volatile("mov r0, r0");
+  }
+}
+
 
 // "The Stepper Driver Interrupt" - This timer interrupt is the workhorse.  
 // It pops blocks from the block_buffer and executes them by pulsing the stepper pins appropriately. 
@@ -3942,7 +3955,9 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     			// WRITE(X_STEP_PIN, HIGH);}
 	          _SET(shields_data , STEP_X_PIN);
 	          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);}
-         } else
+    		  //hack for stepper motor driver
+       		  wait_for_1_8us();
+    	} else
     		virtual_steps_x++;
 
     		counter_x -= current_block->step_event_count;
@@ -3961,6 +3976,7 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     					// WRITE(Y_STEP_PIN, HIGH);}
 	                  _SET(shields_data , STEP_Y_PIN);
 	                  XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);}
+    	       		  wait_for_1_8us();
     				}
     			else
     				virtual_steps_y++;
@@ -3989,6 +4005,7 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     						// WRITE(Z_STEP_PIN, LOW);
 	                          _CLR(shields_data , STEP_Z_PIN);
 	                          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+	                   		  wait_for_1_8us();
     					}
 
       #ifndef ADVANCE
@@ -4016,7 +4033,9 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     						if (step_events_completed <= (unsigned long int)current_block->accelerate_until) {
 
     							// MultiU24X24toH16(acc_step_rate, acceleration_time, current_block->acceleration_rate);
-    							acc_step_rate = (acceleration_time * current_block->acceleration_rate) >> 24;
+    							acc_step_rate = MultiU24X24toH16_emulation(acceleration_time, current_block->acceleration_rate);
+    							// below not working
+    							// acc_step_rate = (acceleration_time * current_block->acceleration_rate) >> 24;
     							acc_step_rate += current_block->initial_rate;
 
       // upper limit
@@ -4044,7 +4063,9 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     						//while deceleration
     						else if (step_events_completed > (unsigned long int)current_block->decelerate_after) {   
     							// MultiU24X24toH16(step_rate, deceleration_time, current_block->acceleration_rate);
-    							step_rate = (deceleration_time * current_block->acceleration_rate) >> 24;
+    							step_rate = MultiU24X24toH16_emulation(deceleration_time, current_block->acceleration_rate);
+    							// below not working
+    							// step_rate = (deceleration_time * current_block->acceleration_rate) >> 24;
 
 if(step_rate > acc_step_rate) { // Check step_rate stays positive
 	step_rate = current_block->final_rate;
