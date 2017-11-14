@@ -3048,10 +3048,99 @@ asm volatile ( \
 	"r26" , "r27" \
 	)
 
-
 uint16_t MultiU24X24toH16_emulation(uint32_t longIn1, uint32_t longIn2){
+	uint8_t a0,b0;    // output 16bit
+	uint8_t a1,b1,c1,a2,b2,c2; //input 32bit
+	a1 = longIn1;
+	b1 = longIn1>>8;
+	c1 = longIn1>>16;
+	a2 = longIn2;
+    b2 = longIn2>>8;
+    c2 = longIn2>>16;
 
+	uint8_t r26 = 0;
+	uint8_t r27;
+
+    uint16_t r1r0 = (uint16_t)a1*(uint16_t)b2;
+    uint8_t r1 = r1r0 >> 8;
+    uint8_t r0 = r1r0;
+
+    r27 = r1;
+
+    r1r0 = (uint16_t)b1*(uint16_t)c2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    a0 = r0;
+    b0 = r1;
+
+    r1r0 = (uint16_t)c1*(uint16_t)c2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    b0 = b0 + r0;
+
+    r1r0 = (uint16_t)c1*(uint16_t)b2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    a0 = a0 + r0;
+
+    b0 = b0 + r1;
+
+    r1r0 = (uint16_t)a1*(uint16_t)c2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    r27 = r27 + r0;
+
+    a0 = a0 + r1;
+
+    b0 = b0 + r26;
+
+    r1r0 = (uint16_t)b1*(uint16_t)b2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    r27 = r27 + r0;
+
+    a0 = a0 + r1;
+
+    b0 = b0 + r26;
+
+    r1r0 = (uint16_t)c1*(uint16_t)a2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    r27 = r27 + r0;
+
+    a0 = a0 + r1;
+
+    b0 = b0 + r26;
+
+    r1r0 = (uint16_t)b1*(uint16_t)a2;
+    r1 = r1r0 >> 8;
+    r0 = r1r0;
+
+    r27 = r27 + r1;
+
+    a0 = a0 + r26;
+
+    b0 = b0 + r26;
+
+    r27 = r27 >> 1;
+
+    a0 = a0 + r26;
+
+    b0 = b0 + r26;
+
+    r1 = 0;
+
+    uint16_t result = (b0<<8) + a0;
+    return result;
 }
+
+
 
 // Some useful constants
 
