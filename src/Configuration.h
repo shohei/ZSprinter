@@ -32,9 +32,37 @@
 #define THERMISTORHEATER 1
 #define THERMISTORBED 1
 
+
+// AXIS STEPS PER ROTATION
+#define BELT_PITCH 2
+/** \brief Number of teeth on X, Y and Z tower pulleys */
+#define PULLEY_TEETH 20
+#define PULLEY_CIRCUMFERENCE (BELT_PITCH * PULLEY_TEETH)
+/** \brief Filament pulley diameter in milimeters */
+#define PULLEY_DIAMETER 10
+#define PULLEY_CIRCUMFERENCE (PULLEY_DIAMETER * 3.1415927)
+/** \brief Steps per rotation of stepper motor */
+#define STEPS_PER_ROTATION 200
+/** \brief Micro stepping rate of X, Y and Y tower stepper drivers */
+#define MICRO_STEPS 16
+
+/** \brief Number of delta moves in each line. Moves that exceed this figure will be split into multiple lines.
+  Increasing this figure can use a lot of memory since 7 bytes * size of line buffer * MAX_SELTA_SEGMENTS_PER_LINE
+  will be allocated for the delta buffer. With defaults 7 * 16 * 30 = 3360 bytes. This leaves ~1K free RAM on an Arduino
+  Mega. */
+//#define MAX_DELTA_SEGMENTS_PER_LINE 30
+// Calculations
+#define AXIS_STEPS_PER_MM ((float)(MICRO_STEPS * STEPS_PER_ROTATION) / PULLEY_CIRCUMFERENCE) //80
+#define XAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
+#define YAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
+#define ZAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
+#define EAXIS_STEPS_PER_MM 700
+
 //// Calibration variables
 // X, Y, Z, E steps per unit - Metric Prusa Mendel with Wade extruder:
-#define _AXIS_STEP_PER_UNIT {80, 80, 3200/1.25,700}
+//#define _AXIS_STEP_PER_UNIT {80, 80, 3200/1.25,700}
+#define _AXIS_STEP_PER_UNIT {XAXIS_STEPS_PER_MM, YAXIS_STEPS_PER_MM, ZAXIS_STEPS_PER_MM, EAXIS_STEPS_PER_MM}
+//#define _AXIS_STEP_PER_UNIT {1, 1, 1, 1}
 // Metric Prusa Mendel with Makergear geared stepper extruder:
 //#define _AXIS_STEP_PER_UNIT {80,80,3200/1.25,1380}
 // MakerGear Hybrid Prusa Mendel:
@@ -128,11 +156,11 @@ const bool INVERT_E_DIR = false;
 //// ENDSTOP SETTINGS:
 //-----------------------------------------------------------------------
 // Sets direction of endstops when homing; 1=MAX, -1=MIN
-#define X_HOME_DIR -1
-#define Y_HOME_DIR -1
-#define Z_HOME_DIR -1
+#define X_HOME_DIR 1
+#define Y_HOME_DIR 1
+#define Z_HOME_DIR 1
 
-//#define ENDSTOPS_ONLY_FOR_HOMING // If defined the endstops will only be used for homing
+#define ENDSTOPS_ONLY_FOR_HOMING // If defined the endstops will only be used for homing
 
 const bool min_software_endstops = false; //If true, axis won't move to coordinates less than zero.
 const bool max_software_endstops = true; //If true, axis won't move to coordinates greater than the defined lengths below.
@@ -141,17 +169,49 @@ const bool max_software_endstops = true; //If true, axis won't move to coordinat
 //-----------------------------------------------------------------------
 //Max Length for Prusa Mendel, check the ways of your axis and set this Values
 //-----------------------------------------------------------------------
-const int X_MAX_LENGTH = 200;
-const int Y_MAX_LENGTH = 200;
-const int Z_MAX_LENGTH = 100;
+//const int X_MAX_LENGTH = 200;
+//const int Y_MAX_LENGTH = 200;
+//const int Z_MAX_LENGTH = 200;
+#define DELTA_SEGMENTS_PER_SECOND 20
+#define DELTA_DIAGONAL_ROD 268.6
+#define DELTA_EFFECTOR_OFFSET 33.29
+#define DELTA_CARRIAGE_OFFSET 38.4
+#define DELTA_PRINTABLE_RADIUS 201.0
+#define DELTA_RADIUS (DELTA_PRINTABLE_RADIUS-DELTA_EFFECTOR_OFFSET-DELTA_CARRIAGE_OFFSET) //=129.31
+
+#define DELTA_DIAGONAL_ROD_TRIM_TOWER_1 0
+#define DELTA_DIAGONAL_ROD_TRIM_TOWER_2 0
+#define DELTA_DIAGONAL_ROD_TRIM_TOWER_3 0
+#define DELTA_RADIUS_TRIM_TOWER_1 0.0
+#define DELTA_RADIUS_TRIM_TOWER_2 0.0
+#define DELTA_RADIUS_TRIM_TOWER_3 0.0
+
+#define MANUAL_Z_HOME_POS 235.42 // Distance between the nozzle to printbed after homing
+
+#define X_MIN_POS -(DELTA_PRINTABLE_RADIUS)
+#define Y_MIN_POS -(DELTA_PRINTABLE_RADIUS)
+#define Z_MIN_POS 0
+#define X_MAX_POS DELTA_PRINTABLE_RADIUS
+#define Y_MAX_POS DELTA_PRINTABLE_RADIUS
+#define Z_MAX_POS MANUAL_Z_HOME_POS
+
+#define X_MAX_LENGTH (X_MAX_POS - (X_MIN_POS))
+#define Y_MAX_LENGTH (Y_MAX_POS - (Y_MIN_POS))
+#define Z_MAX_LENGTH (Z_MAX_POS - (Z_MIN_POS))
+
+#define X_HOME_BUMP_MM 5 
+#define Y_HOME_BUMP_MM 5 
+#define Z_HOME_BUMP_MM 5 // deltas need the same for all three axis
 
 //-----------------------------------------------------------------------
 //// MOVEMENT SETTINGS
 //-----------------------------------------------------------------------
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
-#define _MAX_FEEDRATE {400, 400, 2, 45}       // (mm/sec)    
-#define _HOMING_FEEDRATE {1500,1500,120}      // (mm/min) !!
+//#define _MAX_FEEDRATE {400, 400, 2, 45}       // (mm/sec)    
+#define _MAX_FEEDRATE {100, 100, 100, 45}       // (mm/sec)    
+#define _HOMING_FEEDRATE {1500,1500,1500}      // (mm/min) !!
 #define _AXIS_RELATIVE_MODES {false, false, false, false}
+#define HOMING_FEEDRATE_Z  (50*60)
 
 #define MAX_STEP_FREQUENCY 30000 // Max step frequency
 
@@ -187,10 +247,12 @@ const long min_time_before_dir_change = 30; //milliseconds
 #define _ACCELERATION 1000         // Axis Normal acceleration mm/s^2
 #define _RETRACT_ACCELERATION 2000 // Extruder Normal acceleration mm/s^2
 #define _MAX_XY_JERK 20.0
-#define _MAX_Z_JERK 0.4
+#define _MAX_Z_JERK 20.0 
+//#define _MAX_Z_JERK 0.4
 #define _MAX_E_JERK 5.0    // (mm/sec)
 //#define _MAX_START_SPEED_UNITS_PER_SECOND {25.0,25.0,0.2,10.0}
-#define _MAX_ACCELERATION_UNITS_PER_SQ_SECOND {5000,5000,50,5000}    // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
+//#define _MAX_ACCELERATION_UNITS_PER_SQ_SECOND {5000,5000,50,5000}    // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
+#define _MAX_ACCELERATION_UNITS_PER_SQ_SECOND {5000,5000,5000,5000}    // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
 
 
 // Minimum planner junction speed. Sets the default minimum speed the planner plans for at the end

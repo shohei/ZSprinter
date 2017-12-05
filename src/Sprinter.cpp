@@ -177,9 +177,9 @@ static int btn_value;
 #define DIR_X_PIN 5
 #define DIR_Y_PIN 6
 #define DIR_Z_PIN 7
-#define X_MIN_PIN 8
-#define Y_MIN_PIN 9
-#define Z_MIN_PIN 10
+#define X_MAX_PIN 9 
+#define Y_MAX_PIN 10 
+#define Z_MAX_PIN 11
 
 #define BTNS_DEVICE_ID		XPAR_BUTTONS_DEVICE_ID
 #define BTN_INT 			XGPIO_IR_CH1_MASK
@@ -295,12 +295,16 @@ void __cxa_pure_virtual() {
 // M602 - Reset Temp jitter from Extruder (min / max val) --> Don't use it while Printing
 // M603 - Show Free Ram
 
+// M700 - Versatile command for debug
+ 
 #define _VERSION_TEXT "1.3.22T / 20.08.2012"
 
 //Stepper Movement Variables
 char axis_codes[NUM_AXIS] = { 'X', 'Y', 'Z', 'E' };
 float axis_steps_per_unit[4] = _AXIS_STEP_PER_UNIT;
 
+const float homing_feedrate_mm_m[] = {HOMING_FEEDRATE_Z, HOMING_FEEDRATE_Z,HOMING_FEEDRATE_Z, 0};
+static float feedrate_mm_m = 1500.0, saved_feedrate_mm_m;
 float max_feedrate[4] = _MAX_FEEDRATE;
 float homing_feedrate[] = _HOMING_FEEDRATE;
 bool axis_relative_modes[] = _AXIS_RELATIVE_MODES;
@@ -356,6 +360,37 @@ float move_acceleration = _ACCELERATION;         // Normal acceleration mm/s^2
 
 		long gcode_N, gcode_LastN;
 bool relative_mode = false;  //Determines Absolute or Relative Coordinates
+
+static volatile bool endstop_x_hit = false;
+static volatile bool endstop_y_hit = false;
+static volatile bool endstop_z_hit = false;
+
+
+#define SIN_60 0.8660254037844386
+#define COS_60 0.5
+#define TOWER_1 X_AXIS
+#define TOWER_2 Y_AXIS
+#define TOWER_3 Z_AXIS
+
+float delta_diagonal_rod = DELTA_DIAGONAL_ROD;
+float delta_radius = DELTA_RADIUS;
+float delta_radius_trim_tower_1 = DELTA_RADIUS_TRIM_TOWER_1;
+float delta_radius_trim_tower_2 = DELTA_RADIUS_TRIM_TOWER_2;
+float delta_radius_trim_tower_3 = DELTA_RADIUS_TRIM_TOWER_3;
+
+float delta_diagonal_rod_trim_tower_1 = DELTA_DIAGONAL_ROD_TRIM_TOWER_1;
+float delta_diagonal_rod_trim_tower_2 = DELTA_DIAGONAL_ROD_TRIM_TOWER_2;
+float delta_diagonal_rod_trim_tower_3 = DELTA_DIAGONAL_ROD_TRIM_TOWER_3;
+float delta_diagonal_rod_2_tower_1 = sq(delta_diagonal_rod + delta_diagonal_rod_trim_tower_1);
+float delta_diagonal_rod_2_tower_2 = sq(delta_diagonal_rod + delta_diagonal_rod_trim_tower_2);
+float delta_diagonal_rod_2_tower_3 = sq(delta_diagonal_rod + delta_diagonal_rod_trim_tower_3);
+float delta_tower1_x = -SIN_60 * (delta_radius + DELTA_RADIUS_TRIM_TOWER_1); // front left tower
+float delta_tower1_y = -COS_60 * (delta_radius + delta_radius_trim_tower_1);
+float delta_tower2_x =  SIN_60 * (delta_radius + DELTA_RADIUS_TRIM_TOWER_2); // front right tower
+float delta_tower2_y = -COS_60 * (delta_radius + delta_radius_trim_tower_2);
+float delta_tower3_x = 0;                                                    // back middle tower
+float delta_tower3_y = (delta_radius + delta_radius_trim_tower_3);
+float delta[3];
 
 //unsigned long steps_taken[NUM_AXIS];
 //long axis_interval[NUM_AXIS]; // for speed delay
@@ -725,6 +760,7 @@ void setup() {
 		fromsd[i] = false;
 	}
 
+/*
 	//Initialize Dir Pins
 #if X_DIR_PIN > -1
 	SET_OUTPUT(X_DIR_PIN);
@@ -917,6 +953,7 @@ void setup() {
 	// printf("%d\r\n",(int)sizeof(block_t)*BLOCK_BUFFER_SIZE);
 	// showString(" / ");
 	// printf("%d\r\n",BLOCK_BUFFER_SIZE);
+*/
 
 	for (int8_t i = 0; i < NUM_AXIS; i++) {
 		axis_steps_per_sqr_second[i] = max_acceleration_units_per_sq_second[i]
@@ -924,7 +961,6 @@ void setup() {
 	}
 /*
 */
-
 }
 
 //------------------------------------------------
@@ -1184,6 +1220,144 @@ FORCE_INLINE void homing_routine(char axis) {
 	}
 }
 
+
+inline void line_to_axis_pos(int axis, float where, float fr_mm_m = 0.0) {
+  float old_feedrate_mm_m = feedrate_mm_m;
+  current_position[axis] = where;
+  feedrate_mm_m = (fr_mm_m != 0.0) ? fr_mm_m : homing_feedrate_mm_m[axis];
+  plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], MMM_TO_MMS(feedrate_mm_m));
+  st_synchronize();
+  feedrate_mm_m = old_feedrate_mm_m;
+}
+
+inline void sync_plan_position() {
+  plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
+}
+//inline void sync_plan_position_e() { planner.set_e_position_mm(current_position[E_AXIS]); }
+
+inline void line_to_current_position() {
+  plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS], MMM_TO_MMS(feedrate_mm_m) );
+}
+//
+// line_to_destination
+// Move the planner, not necessarily synced with current_position
+//
+inline void line_to_destination(float fr_mm_m) {
+  plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], MMM_TO_MMS(fr_mm_m));
+}
+inline void line_to_destination() { line_to_destination(feedrate_mm_m); }
+
+inline void sync_plan_position_delta() {
+    inverse_kinematics(current_position);
+    plan_set_position(delta[X_AXIS], delta[Y_AXIS], delta[Z_AXIS], current_position[E_AXIS]);
+}
+
+FORCE_INLINE void homeaxis(int axis){
+	int min_pin, max_pin, home_dir, max_length, home_bump_mm;
+  float axis_homing_feedrate_mm_m;
+
+  switch (axis) {
+    case X_AXIS:
+      min_pin = X_MIN_PIN;
+      max_pin = X_MAX_PIN;
+      home_dir = X_HOME_DIR;
+      max_length = Z_MAX_LENGTH;
+      home_bump_mm = X_HOME_BUMP_MM;
+      axis_homing_feedrate_mm_m = homing_feedrate_mm_m[Z_AXIS];
+      break;
+    case Y_AXIS:
+      min_pin = Y_MIN_PIN;
+      max_pin = Y_MAX_PIN;
+      home_dir = Y_HOME_DIR;
+      max_length = Z_MAX_LENGTH;
+      home_bump_mm = Y_HOME_BUMP_MM;
+      axis_homing_feedrate_mm_m = homing_feedrate_mm_m[Z_AXIS];
+      break;
+    case Z_AXIS:
+      min_pin = Z_MIN_PIN;
+      max_pin = Z_MAX_PIN;
+      home_dir = Z_HOME_DIR;
+      max_length = Z_MAX_LENGTH;
+      home_bump_mm = Z_HOME_BUMP_MM;
+      axis_homing_feedrate_mm_m = homing_feedrate_mm_m[Z_AXIS];
+      break;
+    default:
+        //never reached
+        break;
+  }
+
+    // Set the axis position as setup for the move
+    current_position[axis] = 0;
+    sync_plan_position();
+    // Move towards the endstop until an endstop is triggered
+    line_to_axis_pos(axis, 1.5 * max_length * home_dir);
+    // Set the axis position as setup for the move
+    current_position[axis] = 0;
+    sync_plan_position();
+    // Move away from the endstop by the axis HOME_BUMP_MM
+    line_to_axis_pos(axis, -home_bump_mm * home_dir);
+    // Move slowly towards the endstop until triggered
+    line_to_axis_pos(axis, 2 * home_bump_mm * home_dir, axis_homing_feedrate_mm_m / 10);
+    // reset current_position to 0 to reflect hitting endpoint
+    current_position[axis] = 0;
+    sync_plan_position();
+
+    // not necessary
+    //set_axis_is_at_home(axis);
+
+    //sync_plan_position_delta();
+    sync_plan_position();
+
+    destination[axis] = current_position[axis];
+    switch(axis){
+      case X_AXIS:
+        endstop_x_hit = false; // clear endstop hit flags
+      break;
+      case Y_AXIS:
+        endstop_y_hit = false; // clear endstop hit flags
+      break;
+      case Z_AXIS:
+        endstop_z_hit = false; // clear endstop hit flags
+      break;
+      default:
+      break;
+    }
+    //axis_known_position[axis] = true;
+    //axis_homed[axis] = true;
+}
+
+//no work, since we define pins in THIS file, not pins.h
+void dumpAllPins(){
+  printf("MOTHERBOARD :%d\r\n"  , MOTHERBOARD );
+  printf("X_STEP_PIN  :%d\r\n"  , X_STEP_PIN  );
+  printf("X_DIR_PIN   :%d\r\n"  , X_DIR_PIN   );
+  printf("X_ENABLE_PIN:%d\r\n"  , X_ENABLE_PIN );
+  printf("X_MIN_PIN   :%d\r\n" ,  X_MIN_PIN  );
+  printf("X_MAX_PIN   :%d\r\n" ,  X_MAX_PIN  );
+  printf("Y_STEP_PIN  :%d\r\n" ,  Y_STEP_PIN );
+  printf("Y_DIR_PIN   :%d\r\n" ,  Y_DIR_PIN  );
+  printf("Y_ENABLE_PIN:%d\r\n"  , Y_ENABLE_PIN );
+  printf("Y_MIN_PIN   :%d\r\n"  , Y_MIN_PIN    );
+  printf("Y_MAX_PIN   :%d\r\n"  , Y_MAX_PIN    );
+  printf("Z_STEP_PIN  :%d\r\n"  , Z_STEP_PIN   );
+  printf("Z_DIR_PIN   :%d\r\n"  , Z_DIR_PIN    );
+  printf("Z_ENABLE_PIN:%d\r\n"  , Z_ENABLE_PIN );
+  printf("Z_MIN_PIN   :%d\r\n"  , Z_MIN_PIN    );
+  printf("Z_MAX_PIN   :%d\r\n"  , Z_MAX_PIN    );
+  printf("E_STEP_PIN  :%d\r\n"  , E_STEP_PIN   );
+  printf("E_DIR_PIN   :%d\r\n"  , E_DIR_PIN    );
+  printf("E_ENABLE_PIN:%d\r\n"  , E_ENABLE_PIN );
+  printf("SDPOWER     :%d\r\n"  , SDPOWER      );
+  printf("SDSS        :%d\r\n"  , SDSS         );
+  printf("LED_PIN     :%d\r\n"  , LED_PIN      );
+  printf("FAN_PIN     :%d\r\n"  , FAN_PIN      );
+  printf("PS_ON_PIN   :%d\r\n"  , PS_ON_PIN    );
+  printf("KILL_PIN    :%d\r\n"  , KILL_PIN     );
+  printf("ALARM_PIN   :%d\r\n"  , ALARM_PIN    );
+  printf("HEATER_0_PIN:%d\r\n"  , HEATER_0_PIN );
+  printf("TEMP_0_PIN  :%d\r\n"  , TEMP_0_PIN   );
+}
+
 //------------------------------------------------
 // CHECK COMMAND AND CONVERT VALUES
 //------------------------------------------------
@@ -1246,18 +1420,68 @@ FORCE_INLINE void process_commands() {
 		feedrate = 0;
 		is_homing = true;
 
-		home_all_axis =
-		!((code_seen(axis_codes[0])) || (code_seen(axis_codes[1]))
-			|| (code_seen(axis_codes[2])));
+		//home_all_axis =
+		//!((code_seen(axis_codes[0])) || (code_seen(axis_codes[1]))
+		//	|| (code_seen(axis_codes[2])));
 
-		if ((home_all_axis) || (code_seen(axis_codes[X_AXIS])))
-			homing_routine(X_AXIS);
+		//if ((home_all_axis) || (code_seen(axis_codes[X_AXIS])))
+		//	homing_routine(X_AXIS);
 
-		if ((home_all_axis) || (code_seen(axis_codes[Y_AXIS])))
-			homing_routine(Y_AXIS);
+		//if ((home_all_axis) || (code_seen(axis_codes[Y_AXIS])))
+		//	homing_routine(Y_AXIS);
 
-		if ((home_all_axis) || (code_seen(axis_codes[Z_AXIS])))
-			homing_routine(Z_AXIS);
+		//if ((home_all_axis) || (code_seen(axis_codes[Z_AXIS])))
+		//	homing_routine(Z_AXIS);
+
+    /**
+     * A delta can only safely home all axes at the same time
+     */
+    // Pretend the current position is 0,0,0
+    // This is like quick_home_xy() but for 3 towers.
+    current_position[X_AXIS] = current_position[Y_AXIS] = current_position[Z_AXIS] = 0.0;
+    sync_plan_position();
+    // Move all carriages up together until the first endstop is hit.
+    current_position[X_AXIS] = current_position[Y_AXIS] = current_position[Z_AXIS] = 3.0 * (Z_MAX_LENGTH);
+    feedrate_mm_m = 1.732 * homing_feedrate_mm_m[X_AXIS];
+    line_to_current_position();
+    st_synchronize();
+
+    //endstops.hit_on_purpose(); // clear endstop hit flags
+    endstop_x_hit = false;
+    endstop_y_hit = false;
+    endstop_z_hit = false;
+    current_position[X_AXIS] = current_position[Y_AXIS] = current_position[Z_AXIS] = 0.0;
+
+    homeaxis(X_AXIS);
+    homeaxis(Y_AXIS);
+    homeaxis(Z_AXIS);
+
+   // sync_plan_position_delta();
+    sync_plan_position();
+
+    // set the current position as top
+    // trigger sync_plan_position_delta() to exclude orthogonal coordinates
+    current_position[X_AXIS] = current_position[Y_AXIS] = 0.0;
+    current_position[Z_AXIS] = Z_MAX_POS;
+    destination[X_AXIS] = current_position[X_AXIS];
+    destination[Y_AXIS] = current_position[Y_AXIS];
+    destination[Z_AXIS] = current_position[Z_AXIS];
+    destination[E_AXIS] = current_position[E_AXIS];
+    inverse_kinematics(destination);
+    sync_plan_position_delta();
+
+  // step back to avoid the switch
+    destination[X_AXIS] = current_position[X_AXIS];
+    destination[Y_AXIS] = current_position[Y_AXIS];
+    destination[Z_AXIS] = current_position[Z_AXIS] - Z_HOME_BUMP_MM;
+    destination[E_AXIS] = current_position[E_AXIS];
+    inverse_kinematics(destination);
+    plan_buffer_line(delta[X_AXIS], delta[Y_AXIS],delta[Z_AXIS], destination[E_AXIS], feedrate_mm_m);
+    for (int i = 0; i < NUM_AXIS; i++) {
+      current_position[i] = destination[i];
+    }
+    sync_plan_position_delta();
+
 
 #ifdef ENDSTOPS_ONLY_FOR_HOMING
 		enable_endstops(false);
@@ -1733,6 +1957,7 @@ else if (code_seen('M')) {
 			//showString(PSTR("\r\n"));
 		break;
 		case 114: // M114
+    printf("X: %f, Y: %f, Z: %f, E: %f",current_position[0],current_position[1],current_position[2],current_position[3]);
 			//showString(PSTR("X:"));
 		//	Serial.print(current_position[0]);
 			//showString(PSTR("Y:"));
@@ -1742,6 +1967,7 @@ else if (code_seen('M')) {
 			//showString(PSTR("E:"));
 			//Serial.println(current_position[3]);
 		break;
+
 		case 119: // M119
 
 #if (X_MIN_PIN > -1)
@@ -1934,6 +2160,44 @@ else if (code_seen('M')) {
 			//showString(PSTR("Free Ram: "));
 			//Serial.println(FreeRam1());
 		break;
+
+    case 700: //Versatile command for debug
+     printf("gpio_read:%d\r\n",XGpio_DiscreteRead(&ShieldInst, 1));
+     printf("xmax_pin:%d\r\n",X_MAX_PIN);
+     printf("xmax_pin_read:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MAX_PIN));
+    break;
+
+    case 701: 
+     dumpAllPins();     
+    break;
+
+    case 702: 
+     printf("[GPIO status]:%d\r\n",XGpio_DiscreteRead(&ShieldInst, 1));
+     printf("xmax endstop:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MAX_PIN));
+     printf("ymax endstop:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), Y_MAX_PIN));
+     printf("zmax endstop:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), Z_MAX_PIN));
+     printf("\r\n");
+     printf("xmin endstop:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MIN_PIN));
+     printf("ymin endstop:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), Y_MIN_PIN));
+     printf("zmin endstop:%d\r\n",_CHK(XGpio_DiscreteRead(&ShieldInst, 1), Z_MIN_PIN));
+    break;
+
+    case 703:
+     printf("data direction:%d\r\n",XGpio_GetDataDirection(&ShieldInst, 1));
+    break;
+
+    case 704:
+      homeaxis(X_AXIS);
+    break;
+    case 705:
+      homeaxis(Y_AXIS);
+    break;
+    case 706:
+      homeaxis(Z_AXIS);
+    break;
+
+
+
 		default:
 #ifdef SEND_WRONG_CMD_INFO
 			//showString(PSTR("Unknown M-COM:"));
@@ -1951,6 +2215,7 @@ else if (code_seen('M')) {
 ClearToSend();
 
 }
+
 
 void FlushSerialRequestResend() {
 	//char cmdbuffer[bufindr][100]="Resend:";
@@ -2035,13 +2300,41 @@ void prepare_move() {
 		help_feedrate = ((long) feedrate * (long) 100);
 	}
 
-	plan_buffer_line(destination[X_AXIS], destination[Y_AXIS],
-		destination[Z_AXIS], destination[E_AXIS], help_feedrate / 6000.0);
+  //TODO: IK calculation should be segmented by fraction
+  inverse_kinematics(destination);
+
+	//plan_buffer_line(destination[X_AXIS], destination[Y_AXIS],
+  //		destination[Z_AXIS], destination[E_AXIS], help_feedrate / 6000.0);
+	plan_buffer_line(delta[X_AXIS], delta[Y_AXIS],
+		delta[Z_AXIS], destination[E_AXIS], help_feedrate / 6000.0);
 
 	for (int i = 0; i < NUM_AXIS; i++) {
 		current_position[i] = destination[i];
 	}
 }
+
+
+void inverse_kinematics(const float cartesian[3]) {
+
+  delta[TOWER_1] = sqrt(delta_diagonal_rod_2_tower_1
+      - sq(delta_tower1_x - cartesian[X_AXIS])
+      - sq(delta_tower1_y - cartesian[Y_AXIS])
+      ) + cartesian[Z_AXIS];
+  delta[TOWER_2] = sqrt(delta_diagonal_rod_2_tower_2
+      - sq(delta_tower2_x - cartesian[X_AXIS])
+      - sq(delta_tower2_y - cartesian[Y_AXIS])
+      ) + cartesian[Z_AXIS];
+  delta[TOWER_3] = sqrt(delta_diagonal_rod_2_tower_3
+      - sq(delta_tower3_x - cartesian[X_AXIS])
+      - sq(delta_tower3_y - cartesian[Y_AXIS])
+      ) + cartesian[Z_AXIS];
+
+  for(int i=0;i<3;i++){
+    printf("cartesian[%d]: %f, delta[%d]: %f\r\n",i,cartesian[i],i,delta[i]);
+  }
+
+}
+
 
 #ifdef USE_ARC_FUNCTION
 void prepare_arc_move(char isclockwise)
@@ -2075,7 +2368,7 @@ void prepare_arc_move(char isclockwise)
 FORCE_INLINE void kill() {
 #if TEMP_0_PIN > -1
 	target_raw = 0;
-	WRITE(HEATER_0_PIN, LOW);
+	//WRITE(HEATER_0_PIN, LOW);
 #endif
 
 #if TEMP_1_PIN > -1
@@ -2545,6 +2838,9 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 	target[Y_AXIS] = lround(y * axis_steps_per_unit[Y_AXIS]);
 	target[Z_AXIS] = lround(z * axis_steps_per_unit[Z_AXIS]);
 	target[E_AXIS] = lround(e * axis_steps_per_unit[E_AXIS]);
+  printf("target[X_AXIS]: %d\r\n",target[X_AXIS]);
+  printf("target[Y_AXIS]: %d\r\n",target[Y_AXIS]);
+  printf("target[Z_AXIS]: %d\r\n",target[Z_AXIS]);
 
 	// Prepare to set up new block
 	block_t *block = &block_buffer[block_buffer_head];
@@ -3171,9 +3467,6 @@ static unsigned short acc_step_rate; // needed for deceleration start point
 static char step_loops;
 static unsigned short OCR1A_nominal;
 
-static volatile bool endstop_x_hit = false;
-static volatile bool endstop_y_hit = false;
-static volatile bool endstop_z_hit = false;
 
 static bool old_x_min_endstop = false;
 static bool old_x_max_endstop = false;
@@ -3735,7 +4028,6 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
 	    }
     	// WRITE(X_DIR_PIN, INVERT_X_DIR);
     	CHECK_ENDSTOPS
-
     	{
         #if X_MIN_PIN > -1
     		// bool x_min_endstop=(READ(X_MIN_PIN)!= X_ENDSTOP_INVERT);
@@ -3769,10 +4061,11 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     	CHECK_ENDSTOPS
     	{
         #if X_MAX_PIN > -1
-    		int x_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MAX_PIN):
+    		int x_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), X_MAX_PIN);
     		bool x_max_endstop=( x_max_pin_read != X_ENDSTOP_INVERT);
     		// bool x_max_endstop=(READ(X_MAX_PIN) != X_ENDSTOP_INVERT);
     		if(x_max_endstop && old_x_max_endstop && (current_block->steps_x > 0)){
+          xil_printf("x max endstop hit!\r\n");
     			if(!is_homing)
     				endstop_x_hit=true;
     			else    
@@ -3832,11 +4125,12 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     	CHECK_ENDSTOPS
     	{
         #if Y_MAX_PIN > -1
-    		int y_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Y_MAX_PIN):
+    		int y_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Y_MAX_PIN);
     		bool y_max_endstop=( y_max_pin_read != Y_ENDSTOP_INVERT);
     		// bool y_max_endstop=(READ(Y_MAX_PIN) != Y_ENDSTOP_INVERT);
     		// bool y_max_endstop=(READ(Y_MAX_PIN) != Y_ENDSTOP_INVERT);
     		if(y_max_endstop && old_y_max_endstop && (current_block->steps_y > 0)){
+          xil_printf("y max endstop hit!\r\n");
     			if(!is_homing)
     				endstop_y_hit=true;
     			else  
@@ -3896,10 +4190,11 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     	CHECK_ENDSTOPS
     	{
         #if Z_MAX_PIN > -1
-    		int z_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Z_MAX_PIN):
+    		int z_max_pin_read = _CHK(XGpio_DiscreteRead(&ShieldInst, 1), Z_MAX_PIN);
     		bool z_max_endstop=( z_max_pin_read != Z_ENDSTOP_INVERT);
     		// bool z_max_endstop=(READ(Z_MAX_PIN) != Z_ENDSTOP_INVERT);
     		if(z_max_endstop && old_z_max_endstop && (current_block->steps_z > 0)) {
+          xil_printf("z max endstop hit!\r\n");
     			if(!is_homing)
     				endstop_z_hit=true;
     			else  
@@ -3997,6 +4292,7 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     							// WRITE(Z_STEP_PIN, HIGH);}
 	                          _SET(shields_data , STEP_Z_PIN);
 	                          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);}
+	                   		  wait_for_1_8us();
     					}
     					else
     						virtual_steps_z++;
@@ -4005,7 +4301,6 @@ void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
     						// WRITE(Z_STEP_PIN, LOW);
 	                          _CLR(shields_data , STEP_Z_PIN);
 	                          XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
-	                   		  wait_for_1_8us();
     					}
 
       #ifndef ADVANCE
@@ -4217,7 +4512,18 @@ void initializeGPIO(){
 	// Set LEDs direction to outputs
 	XGpio_SetDataDirection(&LEDInst, 1, 0x00);
 	XGpio_SetDataDirection(&BTNInst, 1, 0xFF);
-	XGpio_SetDataDirection(&ShieldInst, 1, 0x00);
+
+  u32 shield_dir = 0x00;
+  _SET(shield_dir, X_MAX_PIN);
+  _SET(shield_dir, Y_MAX_PIN);
+  _SET(shield_dir, Z_MAX_PIN);
+  printf("shield_dir: %d\r\n",shield_dir);
+	XGpio_SetDataDirection(&ShieldInst, 1, shield_dir);
+  //All are initialized as low
+	printf("<a>shield value: %d\r\n",XGpio_DiscreteRead(&ShieldInst, 1));
+	XGpio_DiscreteWrite(&ShieldInst, 1, 0x00);
+	printf("<b>shield value: %d\r\n",XGpio_DiscreteRead(&ShieldInst, 1));
+	//XGpio_SetDataDirection(&ShieldInst, 1, 0x00);
 }
 
 void initializeAxiTimer(){
