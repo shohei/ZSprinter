@@ -49,6 +49,23 @@ extern "C" void __cxa_pure_virtual();
 #define E_AXIS 3
 
 
+//Extracted from Marlin
+#define MMM_TO_MMS(MM_M) ((MM_M)/60.0)
+#define MMS_TO_MMM(MM_S) ((MM_S)*60.0)
+//#define MMM_SCALED(MM_M) ((MM_M)*feedrate_percentage*0.01)
+//#define MMS_SCALED(MM_S) MMM_SCALED(MM_S)
+//#define MMM_TO_MMS_SCALED(MM_M) (MMS_SCALED(MMM_TO_MMS(MM_M)))
+//#define LOGICAL_POSITION(POS, AXIS) (POS + home_offset[AXIS] + position_shift[AXIS])
+//#define RAW_POSITION(POS, AXIS)     (POS - home_offset[AXIS] - position_shift[AXIS])
+//#define LOGICAL_X_POSITION(POS)     LOGICAL_POSITION(POS, X_AXIS)
+//#define LOGICAL_Y_POSITION(POS)     LOGICAL_POSITION(POS, Y_AXIS)
+//#define LOGICAL_Z_POSITION(POS)     LOGICAL_POSITION(POS, Z_AXIS)
+//#define RAW_X_POSITION(POS)         RAW_POSITION(POS, X_AXIS)
+//#define RAW_Y_POSITION(POS)         RAW_POSITION(POS, Y_AXIS)
+//#define RAW_Z_POSITION(POS)         RAW_POSITION(POS, Z_AXIS)
+//#define RAW_CURRENT_POSITION(AXIS)  RAW_POSITION(current_position[AXIS], AXIS)
+
+
 // This struct is used when buffering the setup for each linear movement "nominal" values are as specified in 
 // the source g-code and may never actually be reached if acceleration management is active.
 typedef struct {
@@ -140,3 +157,6 @@ void log_float(char* message, float value);
 void log_uint(char* message, unsigned int value);
 void log_ulong(char* message, unsigned long value);
 #endif
+
+void inverse_kinematics(const float cartesian[3]);
+
