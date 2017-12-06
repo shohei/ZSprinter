@@ -39,12 +39,10 @@
 #define PULLEY_TEETH 20
 #define PULLEY_CIRCUMFERENCE (BELT_PITCH * PULLEY_TEETH)
 /** \brief Filament pulley diameter in milimeters */
-#define PULLEY_DIAMETER 10
-#define PULLEY_CIRCUMFERENCE (PULLEY_DIAMETER * 3.1415927)
 /** \brief Steps per rotation of stepper motor */
 #define STEPS_PER_ROTATION 200
 /** \brief Micro stepping rate of X, Y and Y tower stepper drivers */
-#define MICRO_STEPS 16
+#define MICRO_STEPS 32 
 
 /** \brief Number of delta moves in each line. Moves that exceed this figure will be split into multiple lines.
   Increasing this figure can use a lot of memory since 7 bytes * size of line buffer * MAX_SELTA_SEGMENTS_PER_LINE
@@ -52,7 +50,7 @@
   Mega. */
 //#define MAX_DELTA_SEGMENTS_PER_LINE 30
 // Calculations
-#define AXIS_STEPS_PER_MM ((float)(MICRO_STEPS * STEPS_PER_ROTATION) / PULLEY_CIRCUMFERENCE) //80
+#define AXIS_STEPS_PER_MM ((float)(MICRO_STEPS * STEPS_PER_ROTATION) / PULLEY_CIRCUMFERENCE) //160
 #define XAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
 #define YAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
 #define ZAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
@@ -186,7 +184,7 @@ const bool max_software_endstops = true; //If true, axis won't move to coordinat
 #define DELTA_RADIUS_TRIM_TOWER_2 0.0
 #define DELTA_RADIUS_TRIM_TOWER_3 0.0
 
-#define MANUAL_Z_HOME_POS 235.42 // Distance between the nozzle to printbed after homing
+#define MANUAL_Z_HOME_POS 381.5 // Distance between the nozzle to printbed after homing
 
 #define X_MIN_POS -(DELTA_PRINTABLE_RADIUS)
 #define Y_MIN_POS -(DELTA_PRINTABLE_RADIUS)
@@ -208,7 +206,7 @@ const bool max_software_endstops = true; //If true, axis won't move to coordinat
 //-----------------------------------------------------------------------
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
 //#define _MAX_FEEDRATE {400, 400, 2, 45}       // (mm/sec)    
-#define _MAX_FEEDRATE {100, 100, 100, 45}       // (mm/sec)    
+#define _MAX_FEEDRATE {400, 400, 400, 45}       // (mm/sec)    
 #define _HOMING_FEEDRATE {1500,1500,1500}      // (mm/min) !!
 #define _AXIS_RELATIVE_MODES {false, false, false, false}
 #define HOMING_FEEDRATE_Z  (50*60)
@@ -244,6 +242,7 @@ const long min_time_before_dir_change = 30; //milliseconds
 //// Acceleration settings
 //-----------------------------------------------------------------------
 // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
+#define _ACCELERATION 1000         // Axis Normal acceleration mm/s^2
 #define _ACCELERATION 1000         // Axis Normal acceleration mm/s^2
 #define _RETRACT_ACCELERATION 2000 // Extruder Normal acceleration mm/s^2
 #define _MAX_XY_JERK 20.0

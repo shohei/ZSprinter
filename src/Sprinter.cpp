@@ -2838,9 +2838,11 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 	target[Y_AXIS] = lround(y * axis_steps_per_unit[Y_AXIS]);
 	target[Z_AXIS] = lround(z * axis_steps_per_unit[Z_AXIS]);
 	target[E_AXIS] = lround(e * axis_steps_per_unit[E_AXIS]);
-  printf("target[X_AXIS]: %d\r\n",target[X_AXIS]);
-  printf("target[Y_AXIS]: %d\r\n",target[Y_AXIS]);
-  printf("target[Z_AXIS]: %d\r\n",target[Z_AXIS]);
+  printf("AXIS_STEPS_PER_MM: %f\r\n",AXIS_STEPS_PER_MM);
+  printf("axis_steps_per_unit[X_AXIS]: %f\r\n",axis_steps_per_unit[X_AXIS]);
+  printf("target[X_AXIS]: %d, position[X_AXIS]: %d\r\n",target[X_AXIS],position[X_AXIS]);
+  printf("target[Y_AXIS]: %d, position[Y_AXIS]: %d\r\n",target[Y_AXIS],position[Y_AXIS]);
+  printf("target[Z_AXIS]: %d, position[Z_AXIS]: %d\r\n",target[Z_AXIS],position[Z_AXIS]);
 
 	// Prepare to set up new block
 	block_t *block = &block_buffer[block_buffer_head];
