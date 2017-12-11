@@ -6,7 +6,7 @@
 //// The following define selects which electronics board you have. Please choose the one that matches your setup
 // MEGA/RAMPS up to 1.2  = 3,
 // RAMPS 1.3/1.4 = 33
-// Gen6 = 5, 
+// Gen6 = 5,
 // Gen6 deluxe = 51
 // Sanguinololu up to 1.1 = 6
 // Sanguinololu 1.2 and above = 62
@@ -17,7 +17,7 @@
 // Gen 3 Plus = 21
 // gen 3  Monolithic Electronics = 22
 // Gen3 PLUS for TechZone Gen3 Remix Motherboard = 23
-#define MOTHERBOARD 4 
+#define MOTHERBOARD 4
 #define __AVR_ATmega328P__
 // #define MOTHERBOARD 33
 
@@ -29,9 +29,9 @@
 // 5 is ParCan supplied 104GT-2 100K
 // 6 is EPCOS 100k
 // 7 is 100k Honeywell thermistor 135-104LAG-J01
-#define THERMISTORHEATER 1
-#define THERMISTORBED 1
-
+// 8 is 100k GT-2, 3.3V ARM, 12-bit XADC
+#define THERMISTORHEATER 8
+#define THERMISTORBED 8
 
 // AXIS STEPS PER ROTATION
 #define BELT_PITCH 2
@@ -42,7 +42,7 @@
 /** \brief Steps per rotation of stepper motor */
 #define STEPS_PER_ROTATION 200
 /** \brief Micro stepping rate of X, Y and Y tower stepper drivers */
-#define MICRO_STEPS 32 
+#define MICRO_STEPS 32
 
 /** \brief Number of delta moves in each line. Moves that exceed this figure will be split into multiple lines.
   Increasing this figure can use a lot of memory since 7 bytes * size of line buffer * MAX_SELTA_SEGMENTS_PER_LINE
@@ -197,16 +197,16 @@ const bool max_software_endstops = true; //If true, axis won't move to coordinat
 #define Y_MAX_LENGTH (Y_MAX_POS - (Y_MIN_POS))
 #define Z_MAX_LENGTH (Z_MAX_POS - (Z_MIN_POS))
 
-#define X_HOME_BUMP_MM 5 
-#define Y_HOME_BUMP_MM 5 
+#define X_HOME_BUMP_MM 5
+#define Y_HOME_BUMP_MM 5
 #define Z_HOME_BUMP_MM 5 // deltas need the same for all three axis
 
 //-----------------------------------------------------------------------
 //// MOVEMENT SETTINGS
 //-----------------------------------------------------------------------
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
-//#define _MAX_FEEDRATE {400, 400, 2, 45}       // (mm/sec)    
-#define _MAX_FEEDRATE {400, 400, 400, 45}       // (mm/sec)    
+//#define _MAX_FEEDRATE {400, 400, 2, 45}       // (mm/sec)
+#define _MAX_FEEDRATE {400, 400, 400, 45}       // (mm/sec)
 #define _HOMING_FEEDRATE {1500,1500,1500}      // (mm/min) !!
 #define _AXIS_RELATIVE_MODES {false, false, false, false}
 #define HOMING_FEEDRATE_Z  (50*60)
@@ -214,7 +214,7 @@ const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z,
 #define MAX_STEP_FREQUENCY 30000 // Max step frequency
 
 //For the retract (negative Extruder) move this maxiumum Limit of Feedrate is used
-//The next positive Extruder move use also this Limit, 
+//The next positive Extruder move use also this Limit,
 //then for the next (second after retract) move the original Maximum (_MAX_FEEDRATE) Limit is used
 #define MAX_RETRACT_FEEDRATE 100    //mm/sec
 
@@ -246,7 +246,7 @@ const long min_time_before_dir_change = 30; //milliseconds
 #define _ACCELERATION 1000         // Axis Normal acceleration mm/s^2
 #define _RETRACT_ACCELERATION 2000 // Extruder Normal acceleration mm/s^2
 #define _MAX_XY_JERK 20.0
-#define _MAX_Z_JERK 20.0 
+#define _MAX_Z_JERK 20.0
 //#define _MAX_Z_JERK 0.4
 #define _MAX_E_JERK 5.0    // (mm/sec)
 //#define _MAX_START_SPEED_UNITS_PER_SECOND {25.0,25.0,0.2,10.0}
@@ -273,7 +273,7 @@ const int dropsegments=5; //everything with less than this number of steps will 
 //-----------------------------------------------------------------------
 // Machine UUID
 //-----------------------------------------------------------------------
-// This may be useful if you have multiple machines and wish to identify them by using the M115 command. 
+// This may be useful if you have multiple machines and wish to identify them by using the M115 command.
 // By default we set it to zeros.
 #define _DEF_CHAR_UUID "00000000-0000-0000-0000-000000000000"
 
@@ -291,14 +291,14 @@ const int dropsegments=5; //everything with less than this number of steps will 
 // #else
    #define BLOCK_BUFFER_SIZE 16
    #define BLOCK_BUFFER_MASK 0x0f
-// #endif 
+// #endif
 
 //-----------------------------------------------------------------------
 //// SETTINGS FOR ARC FUNCTION (Command G2/G2)
 //-----------------------------------------------------------------------
 
 // Arc interpretation settings:
-//Step to split a cirrcle in small Lines 
+//Step to split a cirrcle in small Lines
 // #define MM_PER_ARC_SEGMENT 1
 //After this count of steps a new SIN / COS caluclation is startet to correct the circle interpolation
 // #define N_ARC_CORRECTION 25
@@ -331,7 +331,7 @@ const int dropsegments=5; //everything with less than this number of steps will 
 //If the Printer print slow the Temp is going to AUTO_TEMP_MIN
 //At the moment this Value dont change the targettemp from the Hotend
 //The result of this function is only send with the Temperaturerequest to the host
-//#define AUTOTEMP 
+//#define AUTOTEMP
 #ifdef AUTOTEMP
     #define AUTO_TEMP_MAX 240
     #define AUTO_TEMP_MIN 205
@@ -354,7 +354,7 @@ const int dropsegments=5; //everything with less than this number of steps will 
 //Command M601 / Command M602 Reset the MIN/MAX Value
 //#define DEBUG_HEATER_TEMP
 
-// M303 - PID relay autotune S<temperature> sets the target temperature. 
+// M303 - PID relay autotune S<temperature> sets the target temperature.
 // (default target temperature = 150C)
 #define PID_AUTOTUNE
 
@@ -366,7 +366,7 @@ const int dropsegments=5; //everything with less than this number of steps will 
 
 // magic formula 1, to get approximate "zero error" PWM duty. Take few measurements with low PWM duty and make linear fit to get the formula
 // for my makergear hot-end: linear fit {50,10},{60,20},{80,30},{105,50},{176,100},{128,64},{208,128}
-#define HEATER_DUTY_FOR_SETPOINT(setpoint) ((int)((187L*(long)setpoint)>>8)-27)  
+#define HEATER_DUTY_FOR_SETPOINT(setpoint) ((int)((187L*(long)setpoint)>>8)-27)
 // magic formula 2, to make led brightness approximately linear
 #define LED_PWM_FOR_BRIGHTNESS(brightness) ((64*brightness-1384)/(300-brightness))
 #endif
@@ -447,7 +447,7 @@ const int dropsegments=5; //everything with less than this number of steps will 
 //#define DEBUG
 #ifdef DEBUG
   //#define DEBUG_PREPARE_MOVE //Enable this to debug prepare_move() function
-  //#define DEBUG_MOVE_TIME //Enable this to time each move and print the result   
+  //#define DEBUG_MOVE_TIME //Enable this to time each move and print the result
   //#define DEBUG_HEAT_MGMT //Enable this to debug heat management. WARNING, this will cause axes to jitter!
   //#define DEBUG_DISABLE_CHECK_DURING_TRAVEL //Debug the namesake feature, see above in this file
 #endif

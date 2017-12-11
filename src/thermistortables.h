@@ -373,6 +373,82 @@ const short temptable_7[NUMTEMPS_7][2] = {
 #endif
 
 
+// Thermistor lookup table for RepRap Temperature Sensor Boards (http://make.rrrf.org/ts)
+// Made with createTemperatureLookup.py (http://svn.reprap.org/trunk/reprap/firmware/Arduino/utilities/createTemperatureLookup.py)
+// ./createTemperatureLookup.py --r0=100000.0 --t0=25 --r1=0.0 --r2=4700.0 --beta=4267 --max-adc=4096 --vcc=3.3
+// r0: 100000.0
+// t0: 25
+// r1: 0.0
+// r2: 4700.0
+// beta: 4267
+// max adc: 4096
+// vcc: 3.3
+#if (THERMISTORHEATER == 8) || (THERMISTORBED == 8) // 100k GT-2, 3.3V ARM, 12-bit XADC
+#define NUMTEMPS_8 61
+const short temptable_8[NUMTEMPS_8][2] = {
+   {1, 1179},
+   {69, 320},
+   {137, 267},
+   {205, 240},
+   {273, 222},
+   {341, 208},
+   {409, 198},
+   {477, 189},
+   {545, 181},
+   {613, 175},
+   {681, 169},
+   {749, 164},
+   {817, 159},
+   {885, 155},
+   {953, 150},
+   {1021, 147},
+   {1089, 143},
+   {1157, 140},
+   {1225, 137},
+   {1293, 133},
+   {1361, 131},
+   {1429, 128},
+   {1497, 125},
+   {1565, 122},
+   {1633, 120},
+   {1701, 117},
+   {1769, 115},
+   {1837, 113},
+   {1905, 110},
+   {1973, 108},
+   {2041, 106},
+   {2109, 104},
+   {2177, 101},
+   {2245, 99},
+   {2313, 97},
+   {2381, 95},
+   {2449, 93},
+   {2517, 90},
+   {2585, 88},
+   {2653, 86},
+   {2721, 84},
+   {2789, 82},
+   {2857, 79},
+   {2925, 77},
+   {2993, 75},
+   {3061, 72},
+   {3129, 70},
+   {3197, 67},
+   {3265, 64},
+   {3333, 62},
+   {3401, 59},
+   {3469, 55},
+   {3537, 52},
+   {3605, 48},
+   {3673, 44},
+   {3741, 40},
+   {3809, 35},
+   {3877, 28},
+   {3945, 20},
+   {4013, 8},
+   {4081, 0}
+};
+#endif
 
 #if THERMISTORHEATER == 1
 #define NUMTEMPS NUMTEMPS_1
@@ -395,6 +471,9 @@ const short temptable_7[NUMTEMPS_7][2] = {
 #elif THERMISTORHEATER == 7
 #define NUMTEMPS NUMTEMPS_7
 #define temptable temptable_7
+#elif THERMISTORHEATER == 8
+#define NUMTEMPS NUMTEMPS_8
+#define temptable temptable_8
 #elif defined HEATER_USES_THERMISTOR
 #error No heater thermistor table specified
 #endif
@@ -419,6 +498,9 @@ const short temptable_7[NUMTEMPS_7][2] = {
 #elif THERMISTORBED == 7
 #define BNUMTEMPS NUMTEMPS_7
 #define bedtemptable temptable_7
+#elif THERMISTORBED == 8
+#define BNUMTEMPS NUMTEMPS_8
+#define bedtemptable temptable_8
 #elif defined BED_USES_THERMISTOR
 #error No bed thermistor table specified
 #endif

@@ -23,6 +23,8 @@
 
 #include "Configuration.h"
 #include "thermistortables.h"
+#include "xsysmon.h"
+#include "xparameters.h"
 
 #if defined HEATER_USES_THERMISTOR
 #define temp2analogh( c ) temp2analog_thermistor(c,temptable,NUMTEMPS)
@@ -122,11 +124,11 @@ extern unsigned char manage_monitor;
 #endif
 
 #ifdef PID_AUTOTUNE
- void PID_autotune(int PIDAT_test_temp);
+ void PID_autotune(XSysMon *SysMonInstPtr, int PIDAT_test_temp);
 #endif
 
 #ifdef PIDTEMP
  void updatePID();
 #endif
 
-void manage_heater();
+void manage_heater(XSysMon *SysMonInstPtr);

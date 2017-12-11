@@ -9,6 +9,7 @@
 //#endif
 
 #include "fastio.h"
+#include "xil_types.h"
 
 extern "C" void __cxa_pure_virtual();
 
@@ -159,4 +160,7 @@ void log_ulong(char* message, unsigned long value);
 #endif
 
 void inverse_kinematics(const float cartesian[3]);
+void initializeXADC();
+
+u32 millis();
 

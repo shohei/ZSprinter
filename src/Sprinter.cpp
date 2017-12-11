@@ -165,6 +165,7 @@
 #include "xil_exception.h"
 #include "xscugic.h"
 #include "xgpio.h"
+#include "xsysmon.h"
 
 XGpio LEDInst;
 XGpio BTNInst;
@@ -195,6 +196,16 @@ static int shields_data;
 static int intr_cntr;
 static int pulse_status = 0;
 static XTmrCtr TimerInstancePtr;
+
+#define SYSMON_DEVICE_ID XPAR_SYSMON_0_DEVICE_ID //ID of xadc_wiz_0
+#define XSysMon_RawToExtVoltage(AdcData) ((((float)(AdcData))*(1.0f))/65536.0f) //(ADC 16bit result)/16/4096 = (ADC 16bit result)/65536
+static XSysMon SysMonInst; //a sysmon instance
+static int SysMonFractionToInt(float FloatNum);
+u8 SeqMode;
+u32 ExtVolRawData;
+float ExtVolData;
+XSysMon_Config *SysMonConfigPtr;
+XSysMon *SysMonInstPtr = &SysMonInst;
 
 // #define F_CPU 650000000
 #define F_CPU 16000000
@@ -783,6 +794,8 @@ void setup() {
 		fromsd[i] = false;
 	}
 
+	initializeXADC();
+
 /*
 	//Initialize Dir Pins
 #if X_DIR_PIN > -1
@@ -1030,7 +1043,8 @@ void loop() {
 	}
 
 	//check heater every n milliseconds
-	manage_heater();
+	//manage_heater();
+	manage_heater(SysMonInstPtr);
 	manage_inactivity(1);
 #if (MINIMUM_FAN_START_SPEED > 0)
 	manage_fan_start_speed();
@@ -1400,7 +1414,8 @@ FORCE_INLINE void process_commands() {
 		case 1: // G1
 		//print("process commands fired.\r\n");
 #if (defined DISABLE_CHECK_DURING_ACC) || (defined DISABLE_CHECK_DURING_MOVE) || (defined DISABLE_CHECK_DURING_TRAVEL)
-		manage_heater();
+		//manage_heater();
+		manage_heater(SysMonInstPtr);
 #endif
 			get_coordinates(); // For X Y Z E F
 			prepare_move();
@@ -1431,7 +1446,8 @@ FORCE_INLINE void process_commands() {
 			codenum += millis();  // keep track of when we started waiting
 			st_synchronize();  // wait for all movements to finish
 			while (millis() < codenum) {
-				manage_heater();
+				//manage_heater();
+				manage_heater(SysMonInstPtr);
 			}
 			break;
 		case 28: //G28 Home all Axis one at a time
@@ -1844,7 +1860,8 @@ else if (code_seen('M')) {
           printf("T:%d\r\n",analog2temp(current_raw));
 					codenum = millis();
 				}
-				manage_heater();
+				//manage_heater();
+				manage_heater(SysMonInstPtr);
 #if (MINIMUM_FAN_START_SPEED > 0)
 				manage_fan_start_speed();
 #endif
@@ -1879,7 +1896,8 @@ else if (code_seen('M')) {
 					//Serial.println( analog2tempBed(current_bed_raw) );
 					codenum = millis();
 				}
-				manage_heater();
+				//manage_heater();
+				manage_heater(SysMonInstPtr);
 #if (MINIMUM_FAN_START_SPEED > 0)
 				manage_fan_start_speed();
 #endif
@@ -2155,7 +2173,7 @@ else if (code_seen('M')) {
 			float help_temp = 150.0;
 			if (code_seen('S'))
 				help_temp = code_value();
-			PID_autotune(help_temp);
+			PID_autotune(SysMonInstPtr, help_temp);
 		}
 		break;
 #endif
@@ -2891,7 +2909,8 @@ void plan_buffer_line(float x, float y, float z, float e, float feed_rate) {
 	// If the buffer is full: good! That means we are well ahead of the robot.
 	// Rest here until there is room in the buffer.
 	while (block_buffer_tail == next_buffer_head) {
-		manage_heater();
+		//manage_heater();
+		manage_heater(SysMonInstPtr);
 		manage_inactivity(1);
 #if (MINIMUM_FAN_START_SPEED > 0)
 		manage_fan_start_speed();
@@ -4557,6 +4576,19 @@ void initSteppers(){
 
 }
 
+void initializeXADC(){
+	SysMonConfigPtr = XSysMon_LookupConfig(SYSMON_DEVICE_ID);
+	if(SysMonConfigPtr == NULL) {
+		printf("XsysMon LookupConfig FAILED\n\r");
+	}
+	int xStatus;
+	xStatus = XSysMon_CfgInitialize(SysMonInstPtr, SysMonConfigPtr,SysMonConfigPtr->BaseAddress);
+	if(XST_SUCCESS != xStatus) {
+		printf("XsysMon CfgInitialize FAILED\r\n");
+	}
+    XSysMon_GetStatus(SysMonInstPtr); // Clear the old status
+}
+
 void initializeGPIO(){
 	int xStatus;
 	shields_data = 0;
@@ -4667,7 +4699,8 @@ sei();
 // Block until all buffered steps are executed
 void st_synchronize() {
 	while (blocks_queued()) {
-		manage_heater();
+		//manage_heater();
+		manage_heater(SysMonInstPtr);
 		manage_inactivity(1);
 #if (MINIMUM_FAN_START_SPEED > 0)
 		manage_fan_start_speed();

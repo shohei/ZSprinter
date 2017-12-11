@@ -29,7 +29,11 @@
 #include "Sprinter.h"
 #include <stdio.h>
 #include "xil_io.h"
-
+#define XSysMon_RawToExtVoltage(AdcData) \
+		((((float)(AdcData))*(1.0f))/65536.0f) //(ADC 16bit result)/16/4096 = (ADC 16bit result)/65536
+#define XSysMon_RawToExtVoltage12BitVal(AdcData) \
+		((((float)(AdcData))*(1.0f))/16.0f) //(ADC 16bit result)/16
+											   // 12bit voltage value = 0-4095
 
 #ifdef CONTROLLERFAN_PIN
   void controllerFan(void);
@@ -308,8 +312,12 @@ int read_max6675()
  */
  #endif
  //--------------------END SOFT PWM---------------------------
-int analogRead(){
-  return 0;
+int analogRead(XSysMon *SysMonInstPtr, int vaux_number){
+	while ((XSysMon_GetStatus(SysMonInstPtr) & XSM_SR_EOS_MASK) != XSM_SR_EOS_MASK);//HALT UNTIL ADC RUNS
+
+	u32 ExtVolRawData = XSysMon_GetAdcData(SysMonInstPtr,XSM_CH_AUX_MIN+vaux_number); //Read the external Vaux0 Data
+	int ExtVolData = XSysMon_RawToExtVoltage12BitVal(ExtVolRawData);
+	return ExtVolData;
 }
 
 //-------------------- START PID AUTOTUNE ---------------------------
@@ -319,7 +327,7 @@ int analogRead(){
 // http://brettbeauregard.com/blog/2012/01/arduino-pid-autotune-library/
 //------------------------------------------------------------------
 #ifdef PID_AUTOTUNE
-void PID_autotune(int PIDAT_test_temp)
+void PID_autotune(XSysMon *SysMonInstPtr, int PIDAT_test_temp)
 {
   float PIDAT_input = 0;
   int PIDAT_input_help = 0;
@@ -368,8 +376,9 @@ void PID_autotune(int PIDAT_test_temp)
       
       #ifdef HEATER_USES_THERMISTOR
         //current_raw = analogRead(TEMP_0_PIN);
-        current_raw = analogRead();
-        current_raw = 1023 - current_raw;
+        current_raw = analogRead(SysMonInstPtr, 13);//Vaux13 is A5 pin
+        //current_raw = 1023 - current_raw;
+        current_raw = 4095 - current_raw;
         PIDAT_input_help += analog2temp(current_raw);
         PIDAT_count_input++;
       #elif defined HEATER_USES_AD595
@@ -520,7 +529,7 @@ void PID_autotune(int PIDAT_test_temp)
    #endif
  }
  
- void manage_heater()
+ void manage_heater(XSysMon *SysMonInstPtr)
  {
 
   //Temperatur Monitor for repetier
@@ -528,70 +537,83 @@ void PID_autotune(int PIDAT_test_temp)
   {
     previous_millis_monitor = millis();
 
-
-//    if(manage_monitor <= 1)
-//    {
-//     // showString(PSTR("MTEMP:"));
-////      print(String(millis()));
-//      if(manage_monitor<1)
-//      {
-////        showString(PSTR(" "));
-////        Serial.print(analog2temp(current_raw));
-////        showString(PSTR(" "));
-////        Serial.print(target_temp);
-////        showString(PSTR(" "));
-//        #ifdef PIDTEMP
-////        Serial.println(heater_duty);
-//        #else
-//          #if (HEATER_0_PIN > -1)
-//          if(READ(HEATER_0_PIN))
+    if(manage_monitor <= 1)
+    {
+     // showString(PSTR("MTEMP:"));
+//      print(String(millis()));
+    	printf("MTEMP:%d",millis());
+      if(manage_monitor<1)
+      {
+//        showString(PSTR(" "));
+//        Serial.print(analog2temp(current_raw));
+//        showString(PSTR(" "));
+//        Serial.print(target_temp);
+//        showString(PSTR(" "));
+      	printf(" %d %d",analog2temp(current_raw),target_temp);
+        #ifdef PIDTEMP
+//        Serial.println(heater_duty);
+          printf("%d\r\n",heater_duty);
+        #else
+          #if (HEATER_0_PIN > -1)
+          if(READ(HEATER_0_PIN))
 //            Serial.println(255);
-//          else
+              printf("%d\r\n",255);
+          else
 //            Serial.println(0);
-//          #else
+          printf("%d\r\n",0);
+          #else
 //          Serial.println(0);
-//          #endif
-//        #endif
-//      }
-//      #if THERMISTORBED!=0
-//      else
-//      {
-////        showString(PSTR(" "));
-////        Serial.print(analog2tempBed(current_bed_raw));
-////        showString(PSTR(" "));
-////        Serial.print(analog2tempBed(target_bed_raw));
-////        showString(PSTR(" "));
-////        #if (HEATER_1_PIN > -1)
-////          if(READ(HEATER_1_PIN))
-//////            Serial.println(255);
-////          else
-//////            Serial.println(0);
-////        #else
-////        //  Serial.println(0);
-////        #endif
-//      }
-//      #endif
-//
-//    }
-//
+          printf("%d\r\n",0);
+          #endif
+        #endif
+      }
+      #if THERMISTORBED!=0
+      else
+      {
+    	  printf(" %d %d",analog2tempBed(current_bed_raw),target_bed_raw);
+//        showString(PSTR(" "));
+//        Serial.print(analog2tempBed(current_bed_raw));
+//        showString(PSTR(" "));
+//        Serial.print(analog2tempBed(target_bed_raw));
+//        showString(PSTR(" "));
+        #if (HEATER_1_PIN > -1)
+//          if(READ(HEATER_1_PIN))
+              if(analogRead(SysMonInstPtr, 13))
+//            Serial.println(255);
+              printf("%d\r\n",255);
+          else
+              printf("%d\r\n",0);
+//            Serial.println(0);
+        #else
+        //  Serial.println(0);
+        printf("%d\r\n",0);
+        #endif
+      }
+      #endif
+
+    }
+
   }
   // ENDE Temperatur Monitor for repetier
  
-  if((millis() - previous_millis_heater) < HEATER_CHECK_INTERVAL )
-    return;
+  if((millis() - previous_millis_heater) < HEATER_CHECK_INTERVAL ){
+	  return;
+  }
     
   previous_millis_heater = millis();
   
   #ifdef HEATER_USES_THERMISTOR
 //    current_raw = analogRead(TEMP_0_PIN);
-    current_raw = 0;
+     current_raw = analogRead(SysMonInstPtr,13);//Vaux 13 is A5
+    //current_raw = 0;
     #ifdef DEBUG_HEAT_MGMT
       log_int("_HEAT_MGMT - analogRead(TEMP_0_PIN)", current_raw);
       log_int("_HEAT_MGMT - NUMTEMPS", NUMTEMPS);
     #endif
     // When using thermistor, when the heater is colder than targer temp, we get a higher analog reading than target, 
     // this switches it up so that the reading appears lower than target for the control logic.
-    current_raw = 1023 - current_raw;
+    //current_raw = 1023 - current_raw;
+    current_raw = 4095 - current_raw;
   #elif defined HEATER_USES_AD595
     current_raw = analogRead(TEMP_0_PIN);    
   #elif defined HEATER_USES_MAX6675
@@ -753,8 +775,10 @@ void PID_autotune(int PIDAT_test_temp)
   
     // If using thermistor, when the heater is colder than targer temp, we get a higher analog reading than target, 
     // this switches it up so that the reading appears lower than target for the control logic.
-    current_bed_raw = 1023 - current_bed_raw;
-  #elif defined BED_USES_AD595
+    //current_bed_raw = 1023 - current_bed_raw;
+    current_bed_raw = 4095 - current_bed_raw;
+
+    #elif defined BED_USES_AD595
     current_bed_raw = analogRead(TEMP_1_PIN);                  
 
   #endif
@@ -806,7 +830,9 @@ int temp2analog_thermistor(int celsius, const short table[][2], int numtemps)
     // Overflow: Set to last value in the table
     if (i == numtemps) raw = table[i-1][0];
 
-    return 1023 - raw;
+    //return 1023 - raw;
+    return 4095 - raw;
+
 }
 #endif
 
@@ -826,10 +852,11 @@ int temp2analog_max6675(int celsius)
 
 #if defined (HEATER_USES_THERMISTOR) || defined (BED_USES_THERMISTOR)
 int analog2temp_thermistor(int raw,const short table[][2], int numtemps) {
-    int celsius = 0;
+	int celsius = 0;
     byte i;
     
-    raw = 1023 - raw;
+    //raw = 1023 - raw;
+    raw = 4095 - raw;
 
     for (i=1; i<numtemps; i++)
     {
