@@ -68,8 +68,8 @@ def main(argv):
     r1 = 0;
     r2 = 4700;
     num_temps = int(61);
-    vcc = 3.3
-    max_adc_raw = 4096
+    vcc = 3.279
+    max_adc_raw = 1023 
 
     try:
         opts, args = getopt.getopt(argv, "h", ["help", "r0=", "t0=", "beta=", "r1=", "r2=", "max-adc=", "vcc="])
@@ -105,6 +105,9 @@ def main(argv):
     t = Thermistor(r0, t0, beta, r1, r2, max_adc, vcc)
 
     adcs = list(range(1, max_adc, increment));
+    #print(adcs)
+    # adcs = [1, 18, 35, 52, 69, 86, 103, 120, 137, 154, 171, 188, 205, 222, 239, 256, 273, 290, 307, 324, 341, 358, 375, 392, 409, 426, 443, 460, 477, 494, 511, 528, 545, 562, 579, 596, 613, 630, 647, 664, 681, 698, 715, 732, 749, 766, 783, 800, 817, 834, 851, 868, 885, 902, 919, 936, 953, 970, 987, 1004, 1021]
+
 #   adcs = [1, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 110, 130, 150, 190, 220,  250, 300]
     first = 1
 
@@ -125,7 +128,13 @@ def main(argv):
     counter = 0
     for adc in adcs:
         counter = counter +1
-        temp_adc = int(t.temp(adc)) if int(t.temp(adc)) > 0 else 0
+        v = (adc/1024.0)
+        T0 = t0 + 273.15               # temperature at stated resistance, e.g. 25C
+        k = r0 * exp(-beta / T0)   # constant part of calculation
+        if (1000*vcc-3320*v>0):
+            temp_adc = int(round( (beta * 1.0) / (log (( 1000*vcc - 3320*v) / (k*v))) - 273.15))
+        else:
+            temp_adc = 0
         if counter == len(adcs):
             print("   {%s, %s}" % (adc, temp_adc))
         else:
@@ -137,4 +146,5 @@ def usage():
 
 if __name__ == "__main__":
     main(sys.argv[1:])
+
 

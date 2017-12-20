@@ -377,7 +377,7 @@ void PID_autotune(XSysMon *SysMonInstPtr, int PIDAT_test_temp)
 			//current_raw = analogRead(TEMP_0_PIN);
 			current_raw = analogRead(SysMonInstPtr, 13);//Vaux13 is A5 pin
 			//current_raw = 1023 - current_raw;
-			current_raw = 4095 - current_raw;
+			//current_raw = 4095 - current_raw;
 			PIDAT_input_help += analog2temp(current_raw);
 			PIDAT_count_input++;
 #elif defined HEATER_USES_AD595
@@ -604,6 +604,7 @@ void manage_heater(XSysMon *SysMonInstPtr)
 #ifdef HEATER_USES_THERMISTOR
 	//    current_raw = analogRead(TEMP_0_PIN);
 	current_raw = analogRead(SysMonInstPtr,13);//Vaux 13 is A5
+	printf("current_raw:%d\r\n",current_raw);
 	//current_raw = 0;
 #ifdef DEBUG_HEAT_MGMT
 	log_int("_HEAT_MGMT - analogRead(TEMP_0_PIN)", current_raw);
@@ -612,7 +613,7 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	// When using thermistor, when the heater is colder than targer temp, we get a higher analog reading than target,
 	// this switches it up so that the reading appears lower than target for the control logic.
 	//current_raw = 1023 - current_raw;
-	current_raw = 4095 - current_raw;
+	//current_raw = 4095 - current_raw;
 #elif defined HEATER_USES_AD595
 	current_raw = analogRead(TEMP_0_PIN);
 #elif defined HEATER_USES_MAX6675
@@ -680,10 +681,16 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	int current_temp = analog2temp(current_raw);
 	error = target_temp - current_temp;
 	int delta_temp = current_temp - prev_temp;
+//	printf("target_temp: %d\r\n",target_temp);
+//	printf("current_temp: %d\r\n",current_temp);
+//	printf("delta_temp: %d\r\n",delta_temp);
+	printf("error: %d\r\n",error);
 
 	prev_temp = current_temp;
-	//      pTerm = ((long)PID_Kp * error) / 256;
-	pTerm = 0;
+	//printf("PID_Kp: %d\r\n",PID_Kp); // 2560 default
+	pTerm = ((long)PID_Kp * error) / 256;
+	printf("pTerm: %d\r\n",pTerm);
+	//pTerm = 0;
 	const int H0 = min(HEATER_DUTY_FOR_SETPOINT(target_temp),HEATER_CURRENT);
 	heater_duty = H0 + pTerm;
 
@@ -691,8 +698,9 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	{
 		temp_iState += error;
 		temp_iState = constrain(temp_iState, temp_iState_min, temp_iState_max);
-		//        iTerm = ((long)PID_Ki * temp_iState) / 256;
-		iTerm = 0;
+		iTerm = ((long)PID_Ki * temp_iState) / 256;
+		//iTerm = 0;
+		printf("iTerm: %d\r\n",iTerm);
 		heater_duty += iTerm;
 	}
 
@@ -703,16 +711,18 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	if(prev_error >  9){ prev_error /=  9; log3 += 2; }
 	if(prev_error >  3){ prev_error /=  3; log3 ++;   }
 
-	//      dTerm = ((long)PID_Kd * delta_temp) / (256*log3);
-	dTerm = 0;
+	dTerm = ((long)PID_Kd * delta_temp) / (256*log3);
+	printf("dTerm: %d\r\n",dTerm);
+	//dTerm = 0;
 	heater_duty += dTerm;
 	heater_duty = constrain(heater_duty, 0, HEATER_CURRENT);
-
+	printf("heater_duty: %d\r\n",heater_duty);
 #ifdef PID_SOFT_PWM
 	if(target_raw != 0)
 		g_heater_pwm_val = (unsigned char)heater_duty;
 	else
 		g_heater_pwm_val = 0;
+	printf("g_heater_pwm_val: %d\r\n",g_heater_pwm_val);
 #else
 	if(target_raw != 0)
 		analogWrite(HEATER_0_PIN, heater_duty);
@@ -775,7 +785,7 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	// If using thermistor, when the heater is colder than targer temp, we get a higher analog reading than target,
 	// this switches it up so that the reading appears lower than target for the control logic.
 	//current_bed_raw = 1023 - current_bed_raw;
-	current_bed_raw = 4095 - current_bed_raw;
+	//current_bed_raw = 4095 - current_bed_raw;
 
 #elif defined BED_USES_AD595
 	current_bed_raw = analogRead(TEMP_1_PIN);
@@ -815,7 +825,8 @@ int temp2analog_thermistor(int celsius, const short table[][2], int numtemps)
 
 	for (i=1; i<numtemps; i++)
 	{
-		if (table[i][1] < celsius)
+//		if (table[i][1] < celsius)
+		if (table[i][1] > celsius)
 		{
 			raw = table[i-1][0] +
 					(celsius - table[i-1][1]) *
@@ -829,8 +840,9 @@ int temp2analog_thermistor(int celsius, const short table[][2], int numtemps)
 	// Overflow: Set to last value in the table
 	if (i == numtemps) raw = table[i-1][0];
 
+	return raw;
 	//return 1023 - raw;
-	return 4095 - raw;
+	//return 4095 - raw;
 
 }
 #endif
@@ -855,16 +867,21 @@ int analog2temp_thermistor(int raw,const short table[][2], int numtemps) {
 	byte i;
 
 	//raw = 1023 - raw;
-	raw = 4095 - raw;
+	//raw = 4095 - raw;
 
 	for (i=1; i<numtemps; i++)
 	{
 		if (table[i][0] > raw)
 		{
-			celsius  = table[i-1][1] +
-					(raw - table[i-1][0]) *
-					(table[i][1] - table[i-1][1]) /
-					(table[i][0] - table[i-1][0]);
+//			celsius  = table[i-1][1] +
+//					(raw - table[i-1][0]) *
+//					(table[i][1] - table[i-1][1]) /
+//					(table[i][0] - table[i-1][0]);
+// we should use intermediate difference, perhaps
+			celsius  = table[i+1][1] +
+					(raw - table[i+1][0]) *
+					(table[i][1] - table[i+1][1]) /
+					(table[i][0] - table[i+1][0]);
 
 			break;
 		}

@@ -30,8 +30,9 @@
 // 6 is EPCOS 100k
 // 7 is 100k Honeywell thermistor 135-104LAG-J01
 // 8 is 100k GT-2, 3.3V ARM, 12-bit XADC
-#define THERMISTORHEATER 8
-#define THERMISTORBED 8
+// 9 is 100k GT-2, 3.3V ARM, 10-bit ADC (down-scale from 12bit)
+#define THERMISTORHEATER 9
+#define THERMISTORBED 9
 
 // AXIS STEPS PER ROTATION
 #define BELT_PITCH 2

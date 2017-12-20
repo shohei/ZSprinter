@@ -209,6 +209,7 @@ u32 ExtVolRawData;
 float ExtVolData;
 XSysMon_Config *SysMonConfigPtr;
 XSysMon *SysMonInstPtr = &SysMonInst;
+#define PULSES_500HZ 0x30d40
 
 // #define F_CPU 650000000
 #define F_CPU 16000000
@@ -472,7 +473,8 @@ unsigned long stepper_inactive_time = 0;
 
 //Temp Monitor for repetier
 unsigned char manage_monitor = 255;
-
+//heater pwm value
+extern volatile unsigned char g_heater_pwm_val;
 //------------------------------------------------
 //Init the SD card 
 //------------------------------------------------
@@ -1761,6 +1763,7 @@ FORCE_INLINE void process_commands() {
 #endif
 			if (code_seen('S'))
 				target_raw = temp2analogh(target_temp = code_value());
+				printf("new target raw: %d\r\n",target_raw);
 #ifdef WATCHPERIOD
 			if(target_raw > current_raw)
 			{
@@ -4048,22 +4051,52 @@ else if (e_steps > 0) {
 		XGpio_InterruptEnable(&BTNInst, BTN_INT);
 	}
 
+	void Timer_OVF_vect(){
+#ifdef PID_SOFT_PWM
+		if(g_heater_pwm_val >= 2)
+		{
+			//      WRITE(HEATER_0_PIN,HIGH);
+			XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
+			if(g_heater_pwm_val <= 253){
+				//        OCR2A = g_heater_pwm_val;
+				XTmrCtr_SetResetValue(&TimerInstancePtr2,
+						1, //Change with generic value
+						PULSES_500HZ*g_heater_pwm_val/256);
+			}else{
+				//        OCR2A = 192;
+				XTmrCtr_SetResetValue(&TimerInstancePtr2,
+						1, //Change with generic value
+						PULSES_500HZ*192/256);
+			}
+		}
+		else
+		{
+			//      WRITE(HEATER_0_PIN,LOW);
+			XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
+			//      OCR2A = 192;
+			XTmrCtr_SetResetValue(&TimerInstancePtr2,
+					1, //Change with generic value
+					PULSES_500HZ*192/256);
+		}
+#endif
+	}
+
+	void Timer_COMP_vect(){
+		   if(g_heater_pwm_val > 253)
+		   {
+		//     WRITE(HEATER_0_PIN,HIGH);
+				XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
+		   }
+		   else
+		   {
+		//     WRITE(HEATER_0_PIN,LOW);
+				XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
+		   }
+	}
+
 	XScuGic InterruptController; /* Instance of the Interrupt Controller */
 	static XScuGic_Config *GicConfig;/* The configuration parameters of the controller */
-	void Timer_InterruptHandler2(void *data, u8 TmrCtrNumber)
-	{
-		//500Hz cycle; this is used for the heater management
-		//xil_printf("Interrupt acknowledged.\r\n");
-		u32 reg0 = Xil_In32(TimerInstancePtr2.BaseAddress + XTmrCtr_Offsets[0] + XTC_TCSR_OFFSET);
-		u32 reg1 = Xil_In32(TimerInstancePtr2.BaseAddress + XTmrCtr_Offsets[1] + XTC_TCSR_OFFSET);
-		if(_CHK(reg0,8)){
-			//printf("PWM ON\r\n");
-			XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
-		} else if(_CHK(reg1,8)){
-			//printf("PWM OFF\r\n");
-			XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
-		}
-	}
+
 	//void print(char *str);
 	//extern char inbyte(void);
 	void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
@@ -4509,6 +4542,20 @@ else if (e_steps > 0) {
 		}
 	}
 
+	void Timer_InterruptHandler2(void *data, u8 TmrCtrNumber)
+	{
+		//500Hz cycle; this is used for the heater management
+		//xil_printf("Interrupt acknowledged.\r\n");
+		u32 reg0 = Xil_In32(TimerInstancePtr2.BaseAddress + XTmrCtr_Offsets[0] + XTC_TCSR_OFFSET);
+		u32 reg1 = Xil_In32(TimerInstancePtr2.BaseAddress + XTmrCtr_Offsets[1] + XTC_TCSR_OFFSET);
+		if(_CHK(reg0,8)){
+			//printf("PWM ON\r\n");
+			Timer_OVF_vect();
+		} else if(_CHK(reg1,8)){
+			//printf("PWM OFF\r\n");
+			Timer_COMP_vect();
+		}
+	}
 
 	int SetUpInterruptSystem(XScuGic *XScuGicInstancePtr)
 	{
@@ -4708,10 +4755,10 @@ else if (e_steps > 0) {
 
 		XTmrCtr_SetResetValue(&TimerInstancePtr2,
 				0, //Change with generic value
-				0x30d40);
+				0x30d40);//500Hz
 			XTmrCtr_SetResetValue(&TimerInstancePtr2,
 					1, //Change with generic value
-					0x186a0);
+					0x0);
 
 		xStatus=ScuGicInterrupt_Init(XPAR_PS7_SCUGIC_0_DEVICE_ID,&TimerInstancePtr,&TimerInstancePtr2);
 		if(XST_SUCCESS != xStatus)

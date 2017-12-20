@@ -450,6 +450,74 @@ const short temptable_8[NUMTEMPS_8][2] = {
 };
 #endif
 
+#if (THERMISTORHEATER == 9) || (THERMISTORBED == 9) // 100k GT-2, 3.3V ARM, 10-bit ADC(down-scale from 12bit)
+#define NUMTEMPS_9 61
+const short temptable_9[NUMTEMPS_9][2] = {
+		{1, -34},
+		   {18, 13},
+		   {35, 27},
+		   {52, 36},
+		   {69, 42},
+		   {86, 48},
+		   {103, 53},
+		   {120, 57},
+		   {137, 61},
+		   {154, 65},
+		   {171, 68},
+		   {188, 71},
+		   {205, 74},
+		   {222, 77},
+		   {239, 80},
+		   {256, 83},
+		   {273, 85},
+		   {290, 88},
+		   {307, 90},
+		   {324, 93},
+		   {341, 95},
+		   {358, 98},
+		   {375, 100},
+		   {392, 102},
+		   {409, 105},
+		   {426, 107},
+		   {443, 109},
+		   {460, 112},
+		   {477, 114},
+		   {494, 116},
+		   {511, 119},
+		   {528, 121},
+		   {545, 124},
+		   {562, 126},
+		   {579, 129},
+		   {596, 131},
+		   {613, 134},
+		   {630, 137},
+		   {647, 140},
+		   {664, 143},
+		   {681, 146},
+		   {698, 149},
+		   {715, 152},
+		   {732, 156},
+		   {749, 160},
+		   {766, 164},
+		   {783, 168},
+		   {800, 172},
+		   {817, 177},
+		   {834, 183},
+		   {851, 189},
+		   {868, 195},
+		   {885, 203},
+		   {902, 212},
+		   {919, 223},
+		   {936, 236},
+		   {953, 253},
+		   {970, 277},
+		   {987, 319},
+		   {1004, 439},
+		   {1021, 500}
+};
+#endif
+
+
 #if THERMISTORHEATER == 1
 #define NUMTEMPS NUMTEMPS_1
 #define temptable temptable_1
@@ -474,6 +542,9 @@ const short temptable_8[NUMTEMPS_8][2] = {
 #elif THERMISTORHEATER == 8
 #define NUMTEMPS NUMTEMPS_8
 #define temptable temptable_8
+#elif THERMISTORHEATER == 9
+#define NUMTEMPS NUMTEMPS_9
+#define temptable temptable_9
 #elif defined HEATER_USES_THERMISTOR
 #error No heater thermistor table specified
 #endif
@@ -501,6 +572,9 @@ const short temptable_8[NUMTEMPS_8][2] = {
 #elif THERMISTORBED == 8
 #define BNUMTEMPS NUMTEMPS_8
 #define bedtemptable temptable_8
+#elif THERMISTORBED == 9
+#define BNUMTEMPS NUMTEMPS_9
+#define bedtemptable temptable_9
 #elif defined BED_USES_THERMISTOR
 #error No bed thermistor table specified
 #endif
