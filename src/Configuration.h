@@ -55,7 +55,7 @@
 #define XAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
 #define YAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
 #define ZAXIS_STEPS_PER_MM AXIS_STEPS_PER_MM
-#define EAXIS_STEPS_PER_MM 700
+#define EAXIS_STEPS_PER_MM 182 //182:160*92.65/80 (original: 700)
 
 //// Calibration variables
 // X, Y, Z, E steps per unit - Metric Prusa Mendel with Wade extruder:
@@ -185,7 +185,7 @@ const bool max_software_endstops = true; //If true, axis won't move to coordinat
 #define DELTA_RADIUS_TRIM_TOWER_2 0.0
 #define DELTA_RADIUS_TRIM_TOWER_3 0.0
 
-#define MANUAL_Z_HOME_POS 381.5 // Distance between the nozzle to printbed after homing
+#define MANUAL_Z_HOME_POS 383 // Distance between the nozzle to printbed after homing
 
 #define X_MIN_POS -(DELTA_PRINTABLE_RADIUS)
 #define Y_MIN_POS -(DELTA_PRINTABLE_RADIUS)
@@ -245,11 +245,13 @@ const long min_time_before_dir_change = 30; //milliseconds
 // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 #define _ACCELERATION 1000         // Axis Normal acceleration mm/s^2
 #define _ACCELERATION 1000         // Axis Normal acceleration mm/s^2
-#define _RETRACT_ACCELERATION 2000 // Extruder Normal acceleration mm/s^2
+//#define _RETRACT_ACCELERATION 2000 // Extruder Normal acceleration mm/s^2
+#define _RETRACT_ACCELERATION 1000 // Extruder Normal acceleration mm/s^2
 #define _MAX_XY_JERK 20.0
 #define _MAX_Z_JERK 20.0
 //#define _MAX_Z_JERK 0.4
-#define _MAX_E_JERK 5.0    // (mm/sec)
+//#define _MAX_E_JERK 5.0    // (mm/sec)
+#define _MAX_E_JERK 20.0    // (mm/sec)
 //#define _MAX_START_SPEED_UNITS_PER_SECOND {25.0,25.0,0.2,10.0}
 //#define _MAX_ACCELERATION_UNITS_PER_SQ_SECOND {5000,5000,50,5000}    // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
 #define _MAX_ACCELERATION_UNITS_PER_SQ_SECOND {5000,5000,5000,5000}    // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts

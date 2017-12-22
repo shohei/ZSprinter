@@ -604,7 +604,7 @@ void manage_heater(XSysMon *SysMonInstPtr)
 #ifdef HEATER_USES_THERMISTOR
 	//    current_raw = analogRead(TEMP_0_PIN);
 	current_raw = analogRead(SysMonInstPtr,13);//Vaux 13 is A5
-	printf("current_raw:%d\r\n",current_raw);
+	//printf("current_raw:%d\r\n",current_raw);
 	//current_raw = 0;
 #ifdef DEBUG_HEAT_MGMT
 	log_int("_HEAT_MGMT - analogRead(TEMP_0_PIN)", current_raw);
@@ -681,15 +681,10 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	int current_temp = analog2temp(current_raw);
 	error = target_temp - current_temp;
 	int delta_temp = current_temp - prev_temp;
-//	printf("target_temp: %d\r\n",target_temp);
-//	printf("current_temp: %d\r\n",current_temp);
-//	printf("delta_temp: %d\r\n",delta_temp);
-	printf("error: %d\r\n",error);
 
 	prev_temp = current_temp;
 	//printf("PID_Kp: %d\r\n",PID_Kp); // 2560 default
 	pTerm = ((long)PID_Kp * error) / 256;
-	printf("pTerm: %d\r\n",pTerm);
 	//pTerm = 0;
 	const int H0 = min(HEATER_DUTY_FOR_SETPOINT(target_temp),HEATER_CURRENT);
 	heater_duty = H0 + pTerm;
@@ -700,7 +695,6 @@ void manage_heater(XSysMon *SysMonInstPtr)
 		temp_iState = constrain(temp_iState, temp_iState_min, temp_iState_max);
 		iTerm = ((long)PID_Ki * temp_iState) / 256;
 		//iTerm = 0;
-		printf("iTerm: %d\r\n",iTerm);
 		heater_duty += iTerm;
 	}
 
@@ -712,17 +706,14 @@ void manage_heater(XSysMon *SysMonInstPtr)
 	if(prev_error >  3){ prev_error /=  3; log3 ++;   }
 
 	dTerm = ((long)PID_Kd * delta_temp) / (256*log3);
-	printf("dTerm: %d\r\n",dTerm);
 	//dTerm = 0;
 	heater_duty += dTerm;
 	heater_duty = constrain(heater_duty, 0, HEATER_CURRENT);
-	printf("heater_duty: %d\r\n",heater_duty);
 #ifdef PID_SOFT_PWM
 	if(target_raw != 0)
 		g_heater_pwm_val = (unsigned char)heater_duty;
 	else
 		g_heater_pwm_val = 0;
-	printf("g_heater_pwm_val: %d\r\n",g_heater_pwm_val);
 #else
 	if(target_raw != 0)
 		analogWrite(HEATER_0_PIN, heater_duty);

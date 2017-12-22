@@ -182,6 +182,8 @@ static int btn_value;
 #define X_MAX_PIN 9 
 #define Y_MAX_PIN 10 
 #define Z_MAX_PIN 11
+#define STEP_E_PIN 12
+#define DIR_E_PIN 13
 
 #define BTNS_DEVICE_ID		XPAR_BUTTONS_DEVICE_ID
 #define BTN_INT 			XGPIO_IR_CH1_MASK
@@ -1414,6 +1416,8 @@ FORCE_INLINE void process_commands() {
 	unsigned long codenum; //throw away variable
 	char *starpos = NULL;
 
+	printf("recv: %s\r\n",cmdbuffer[bufindr]);
+
 	if (code_seen('G')) {
 		switch ((int) code_value()) {
 		case 0: // G0 -> G1
@@ -1551,16 +1555,17 @@ FORCE_INLINE void process_commands() {
 			relative_mode = true;
 			break;
 		case 92: // G92
-			if (!code_seen(axis_codes[E_AXIS]))
-				st_synchronize();
+//			if (!code_seen(axis_codes[E_AXIS])){
+//				st_synchronize();
+//			}
 
 			for (int i = 0; i < NUM_AXIS; i++) {
 				if (code_seen(axis_codes[i]))
 					current_position[i] = code_value();
 			}
-			plan_set_position(current_position[X_AXIS],
-					current_position[Y_AXIS], current_position[Z_AXIS],
-					current_position[E_AXIS]);
+//			plan_set_position(current_position[X_AXIS],
+//					current_position[Y_AXIS], current_position[Z_AXIS],
+//					current_position[E_AXIS]);
 			break;
 		default:
 #ifdef SEND_WRONG_CMD_INFO
@@ -1763,7 +1768,6 @@ FORCE_INLINE void process_commands() {
 #endif
 			if (code_seen('S'))
 				target_raw = temp2analogh(target_temp = code_value());
-				printf("new target raw: %d\r\n",target_raw);
 #ifdef WATCHPERIOD
 			if(target_raw > current_raw)
 			{
@@ -2949,7 +2953,7 @@ FORCE_INLINE void process_commands() {
 		block->step_event_count = max(block->steps_x,
 				max(block->steps_y, max(block->steps_z, block->steps_e)));
 
-		//printf("step x: %d, step y: %d, step z: %d, step e: %d\r\n", block->steps_x, block->steps_y, block->steps_z, block->steps_e);
+		printf("step x: %d, step y: %d, step z: %d, step e: %d\r\n", block->steps_x, block->steps_y, block->steps_z, block->steps_e);
 
 		// Bail if this is a zero-length block
 		if (block->step_event_count <= dropsegments) {
@@ -4133,9 +4137,9 @@ else if (e_steps > 0) {
 				counter_z = counter_x;
 				counter_e = counter_x;
 				step_events_completed = 0;
-				//      #ifdef ADVANCE
-				//      e_steps = 0;
-				//      #endif
+				      #ifdef ADVANCE
+				      e_steps = 0;
+				      #endif
 			}
 			else {
 				// OCR1A=2000; // 1kHz.
@@ -4345,17 +4349,16 @@ else if (e_steps > 0) {
 			}
 
 #ifndef ADVANCE
-			//    if ((out_bits & (1<<E_AXIS)) != 0) {  // -direction
-			// WRITE(E_DIR_PIN, INVERT_E_DIR);}
-			//	    _CLR(shields_data , DIR_E_PIN);
-			//	    XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
-			//      else { // +direction
-			// WRITE(E_DIR_PIN, !INVERT_E_DIR);}
-			//	    _SET(shields_data , DIR_E_PIN);
-			//	    XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+			    if ((out_bits & (1<<E_AXIS)) != 0) {  // -direction
+			    	//WRITE(E_DIR_PIN, INVERT_E_DIR);}
+				    _CLR(shields_data , DIR_E_PIN);
+				    XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+			    }else { // +direction
+			    	  //WRITE(E_DIR_PIN, !INVERT_E_DIR);}
+				    _SET(shields_data , DIR_E_PIN);
+				    XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+			    }
 #endif //!ADVANCE
-
-
 
 			for(int8_t i=0; i < step_loops; i++) { // Take multiple steps per interrupt (For high speed moves)
 
@@ -4440,13 +4443,15 @@ else if (e_steps > 0) {
 				counter_e += current_block->steps_e;
 				if (counter_e > 0) {
 					// WRITE(E_STEP_PIN, HIGH);
-					//	                            _SET(shields_data , STEP_E_PIN);
-					//	                            XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+					_SET(shields_data , STEP_E_PIN);
+					XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+
+					wait_for_1_8us();
 
 					counter_e -= current_block->step_event_count;
 					// WRITE(E_STEP_PIN, LOW);
-					//	                            _CLR(shields_data , STEP_E_PIN);
-					//	                            XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+					_CLR(shields_data , STEP_E_PIN);
+					XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
 				}
 #endif //!ADVANCE
 
