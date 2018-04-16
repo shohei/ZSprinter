@@ -163,12 +163,12 @@
 #include "xparameters.h"
 #include "xil_io.h"
 #include "xil_exception.h"
-#include "xscugic.h"
 #include "xgpio.h"
 #include "xsysmon.h"
+#include "xintc.h"
 
-XGpio LEDInst;
-XGpio BTNInst;
+//XGpio LEDInst;
+//XGpio BTNInst;
 XGpio ShieldInst;
 XGpio HeaterInst;
 static int btn_value;
@@ -185,11 +185,11 @@ static int btn_value;
 #define STEP_E_PIN 12
 #define DIR_E_PIN 13
 
-#define BTNS_DEVICE_ID		XPAR_BUTTONS_DEVICE_ID
-#define BTN_INT 			XGPIO_IR_CH1_MASK
-#define LEDS_DEVICE_ID		XPAR_LEDS_DEVICE_ID
-#define SHIELDS_DEVICE_ID		XPAR_SHIELDS_DEVICE_ID
-#define HEATER_DEVICE_ID	XPAR_HEATER_DEVICE_ID
+//#define BTNS_DEVICE_ID		XPAR_BUTTONS_DEVICE_ID
+//#define BTN_INT 			XGPIO_IR_CH1_MASK
+//#define LEDS_DEVICE_ID		XPAR_LEDS_DEVICE_ID
+#define SHIELDS_DEVICE_ID		XPAR_IOP_ARDUINO_GPIO_SUBSYSTEM_ARDUINO_GPIO_BASEADDR
+#define HEATER_DEVICE_ID	XPAR_IOP_ARDUINO_GPIO_SUBSYSTEM_CK_GPIO_DEVICE_ID
 
 #define _SET(TARGET,BIT) (TARGET |= 1 << BIT)
 #define _CLR(TARGET,BIT) (TARGET &= ~(1 << BIT))
@@ -3667,7 +3667,8 @@ FORCE_INLINE void process_commands() {
 	void wait_for_1_8us(){
 		/* NOP inserted:So that high time is 1.8us approximately */
 		for(int i=0;i<100;i++){
-			asm volatile("mov r0, r0");
+//			asm volatile("mov r0, r0");
+			asm volatile("nop");
 		}
 	}
 
@@ -4021,40 +4022,6 @@ else if (e_steps > 0) {
 		XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
 	}
 
-	void BTN_Intr_Handler(void *InstancePtr) {
-		// Disable GPIO interrupts
-		print(" Button Interrupt \n \r ");
-		print("\r\n");
-		print("\r\n");
-
-		XGpio_InterruptDisable(&BTNInst, BTN_INT);
-		// Ignore additional button presses
-		if ((XGpio_InterruptGetStatus(&BTNInst) & BTN_INT) != BTN_INT) {
-			return;
-		}
-
-		btn_value = XGpio_DiscreteRead(&BTNInst, 1);
-		switch (btn_value){
-		case 0b001:
-			_TGL(shields_data , STEP_X_PIN);
-			XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
-			break;
-		case 0b010:
-			_TGL(shields_data , STEP_Y_PIN);
-			XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
-			break;
-		case 0b100:
-			_TGL(shields_data , STEP_Z_PIN);
-			XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
-			break;
-		}
-		XGpio_DiscreteWrite(&LEDInst, 1, btn_value);
-		(void) XGpio_InterruptClear(&BTNInst, BTN_INT);
-
-		// Enable GPIO interrupts
-		XGpio_InterruptEnable(&BTNInst, BTN_INT);
-	}
-
 	void Timer_OVF_vect(){
 #ifdef PID_SOFT_PWM
 		if(g_heater_pwm_val >= 2)
@@ -4098,9 +4065,9 @@ else if (e_steps > 0) {
 		   }
 	}
 
-	XScuGic InterruptController; /* Instance of the Interrupt Controller */
-	static XScuGic_Config *GicConfig;/* The configuration parameters of the controller */
-
+//	XScuGic InterruptController; /* Instance of the Interrupt Controller */
+//	static XScuGic_Config *GicConfig;/* The configuration parameters of the controller */
+	XIntc IntcInstancePtr;
 	//void print(char *str);
 	//extern char inbyte(void);
 	void Timer_InterruptHandler(void *data, u8 TmrCtrNumber)
@@ -4562,88 +4529,6 @@ else if (e_steps > 0) {
 		}
 	}
 
-	int SetUpInterruptSystem(XScuGic *XScuGicInstancePtr)
-	{
-		/*
-		 * Connect the interrupt controller interrupt handler to the hardware
-		 * interrupt handling logic in the ARM processor.
-		 */
-		XGpio_InterruptEnable(&BTNInst, BTN_INT);
-		XGpio_InterruptGlobalEnable(&BTNInst);
-
-		Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
-				(Xil_ExceptionHandler) XScuGic_InterruptHandler,
-				XScuGicInstancePtr);
-		/*
-		 * Enable interrupts in the ARM
-		 */
-		Xil_ExceptionEnable();
-		return XST_SUCCESS;
-	}
-
-	int ScuGicInterrupt_Init(u16 DeviceId,XTmrCtr *TimerInstancePtr,XTmrCtr *TimerInstancePtr2)
-	{
-		int Status;
-		/*
-		 * Initialize the interrupt controller driver so that it is ready to
-		 * use.
-		 * */
-		GicConfig = XScuGic_LookupConfig(DeviceId);
-		if (NULL == GicConfig) {
-			return XST_FAILURE;
-		}
-		Status = XScuGic_CfgInitialize(&InterruptController, GicConfig,
-				GicConfig->CpuBaseAddress);
-		if (Status != XST_SUCCESS) {
-			return XST_FAILURE;
-		}
-		/*
-		 * Setup the Interrupt System
-		 * */
-		Status = SetUpInterruptSystem(&InterruptController);
-		if (Status != XST_SUCCESS) {
-			return XST_FAILURE;
-		}
-		/*
-		 * Connect a device driver handler that will be called when an
-		 * interrupt for the device occurs, the device driver handler performs
-		 * the specific interrupt processing for the device
-		 */
-		Status = XScuGic_Connect(&InterruptController,
-				XPAR_FABRIC_AXI_TIMER_0_INTERRUPT_INTR,
-				(Xil_ExceptionHandler)XTmrCtr_InterruptHandler,
-				(void *)TimerInstancePtr);
-		if (Status != XST_SUCCESS) {
-			return XST_FAILURE;
-		}
-		Status = XScuGic_Connect(&InterruptController,
-				XPAR_FABRIC_AXI_TIMER_1_INTERRUPT_INTR,
-				(Xil_ExceptionHandler)XTmrCtr_InterruptHandler,
-				(void *)TimerInstancePtr2);
-		if (Status != XST_SUCCESS) {
-			return XST_FAILURE;
-		}
-		Status = XScuGic_Connect(&InterruptController,
-				XPAR_FABRIC_BUTTONS_IP2INTC_IRPT_INTR,
-				(Xil_ExceptionHandler) BTN_Intr_Handler,
-				(void *) &BTNInst);
-		if (Status != XST_SUCCESS)
-			return XST_FAILURE;
-
-		// Enable GPIO interrupts interrupt
-		XGpio_InterruptEnable(&BTNInst, 1);
-		XGpio_InterruptGlobalEnable(&BTNInst);
-
-		/*
-		 * Enable the interrupt for the device and then cause (simulate) an
-		 * interrupt so the handlers will be called
-		 */
-		XScuGic_Enable(&InterruptController, XPAR_FABRIC_AXI_TIMER_0_INTERRUPT_INTR);
-		XScuGic_Enable(&InterruptController, XPAR_FABRIC_AXI_TIMER_1_INTERRUPT_INTR);
-		XScuGic_Enable(&InterruptController, XPAR_FABRIC_BUTTONS_IP2INTC_IRPT_INTR);
-		return XST_SUCCESS;
-	}
-
 	void initSteppers(){
 		//no use of enable pin
 		//	_CLR(shields_data , X_EN_PIN);
@@ -4667,16 +4552,6 @@ else if (e_steps > 0) {
 	void initializeGPIO(){
 		int xStatus;
 		shields_data = 0;
-		// Initialise LEDs
-		xStatus = XGpio_Initialize(&LEDInst, LEDS_DEVICE_ID);
-		if (xStatus != XST_SUCCESS)
-			// return XST_FAILURE;
-			return;
-		// Initialise Push Buttons
-		xStatus = XGpio_Initialize(&BTNInst, BTNS_DEVICE_ID);
-		if (xStatus != XST_SUCCESS)
-			// return XST_FAILURE;
-			return;
 		xStatus = XGpio_Initialize(&ShieldInst, SHIELDS_DEVICE_ID);
 		if (xStatus != XST_SUCCESS)
 			// return XST_FAILURE;
@@ -4686,8 +4561,6 @@ else if (e_steps > 0) {
 			// return XST_FAILURE;
 			return;
 		// Set LEDs direction to outputs
-		XGpio_SetDataDirection(&LEDInst, 1, 0x00);
-		XGpio_SetDataDirection(&BTNInst, 1, 0xFF);
 		XGpio_SetDataDirection(&HeaterInst, 1, 0x00);
 
 		u32 shield_dir = 0x00;
@@ -4712,7 +4585,7 @@ else if (e_steps > 0) {
 		//**************************************************************************//
 		// Timer1 init
 		//**************************************************************************//
-		int xStatus = XTmrCtr_Initialize(&TimerInstancePtr,XPAR_AXI_TIMER_0_DEVICE_ID);
+		int xStatus = XTmrCtr_Initialize(&TimerInstancePtr,XPAR_TMRCTR_0_DEVICE_ID);
 		if(XST_SUCCESS != xStatus)
 			print("TIMER INIT FAILED \n\r");
 
@@ -4727,13 +4600,13 @@ else if (e_steps > 0) {
 		//			//0xf8000000);
 
 		XTmrCtr_SetOptions(&TimerInstancePtr,
-				XPAR_AXI_TIMER_0_DEVICE_ID,
+				XPAR_TMRCTR_0_DEVICE_ID,
 				(XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION | XTC_DOWN_COUNT_OPTION));//Timer1 is DOWN counter
 
 		//**************************************************************************//
 		// Timer2 init
 		//**************************************************************************//
-		xStatus = XTmrCtr_Initialize(&TimerInstancePtr2,XPAR_AXI_TIMER_1_DEVICE_ID);
+		xStatus = XTmrCtr_Initialize(&TimerInstancePtr2,XPAR_TMRCTR_1_DEVICE_ID);
 		if(XST_SUCCESS != xStatus)
 			print("TIMER INIT2 FAILED \n\r");
 
@@ -4761,13 +4634,33 @@ else if (e_steps > 0) {
 		XTmrCtr_SetResetValue(&TimerInstancePtr2,
 				0, //Change with generic value
 				0x30d40);//500Hz
-			XTmrCtr_SetResetValue(&TimerInstancePtr2,
-					1, //Change with generic value
-					0x0);
+		XTmrCtr_SetResetValue(&TimerInstancePtr2,
+				1, //Change with generic value
+				0x0);
 
-		xStatus=ScuGicInterrupt_Init(XPAR_PS7_SCUGIC_0_DEVICE_ID,&TimerInstancePtr,&TimerInstancePtr2);
-		if(XST_SUCCESS != xStatus)
-			print(" :( SCUGIC INIT FAILED \n\r");
+		xStatus = XIntc_Initialize(&IntcInstancePtr, XPAR_INTC_0_DEVICE_ID);
+		if (xStatus != XST_SUCCESS){
+			print("intc init error\n\r");
+		}
+
+		xStatus = XIntc_Connect(&IntcInstancePtr, XPAR_TMRCTR_0_DEVICE_ID,
+				(XInterruptHandler)XTmrCtr_InterruptHandler,
+				(void*)&TimerInstancePtr);
+		if (xStatus != XST_SUCCESS){
+			print("connect timer0 error\n\r");
+		}
+		xStatus = XIntc_Connect(&IntcInstancePtr, XPAR_TMRCTR_1_DEVICE_ID,
+				(XInterruptHandler)XTmrCtr_InterruptHandler,
+				(void*)&TimerInstancePtr);
+		if (xStatus != XST_SUCCESS){
+			print("connect timer1 error\n\r");
+		}
+		xStatus = XIntc_Start(&IntcInstancePtr, XIN_REAL_MODE);
+		if (xStatus != XST_SUCCESS){
+			print("intc start error\n\r");
+		}
+		XIntc_Enable(&IntcInstancePtr, XPAR_INTC_0_DEVICE_ID);
+		microblaze_enable_interrupts();
 
 		XTmrCtr_Start(&TimerInstancePtr,0);
 		print("AXI timer1 start \n\r");
