@@ -170,7 +170,7 @@
 //XGpio LEDInst;
 //XGpio BTNInst;
 XGpio ShieldInst;
-XGpio HeaterInst;
+//XGpio HeaterInst;
 static int btn_value;
 
 #define STEP_X_PIN 2
@@ -184,12 +184,13 @@ static int btn_value;
 #define Z_MAX_PIN 11
 #define STEP_E_PIN 12
 #define DIR_E_PIN 13
+#define HEATER_PIN 18 //A4
 
 //#define BTNS_DEVICE_ID		XPAR_BUTTONS_DEVICE_ID
 //#define BTN_INT 			XGPIO_IR_CH1_MASK
 //#define LEDS_DEVICE_ID		XPAR_LEDS_DEVICE_ID
 #define SHIELDS_DEVICE_ID		XPAR_IOP_ARDUINO_GPIO_SUBSYSTEM_ARDUINO_GPIO_BASEADDR
-#define HEATER_DEVICE_ID	XPAR_IOP_ARDUINO_GPIO_SUBSYSTEM_CK_GPIO_DEVICE_ID
+//#define HEATER_DEVICE_ID	XPAR_IOP_ARDUINO_GPIO_SUBSYSTEM_CK_GPIO_BASEADDR
 
 #define _SET(TARGET,BIT) (TARGET |= 1 << BIT)
 #define _CLR(TARGET,BIT) (TARGET &= ~(1 << BIT))
@@ -1799,6 +1800,7 @@ FORCE_INLINE void process_commands() {
 #if (TEMP_0_PIN > -1) || defined (HEATER_USES_MAX6675) || defined HEATER_USES_AD595
 			//showString(PSTR("ok T:"));
 			//Serial.print(hotendtC);
+			//printf("current_raw:%d\r\n",current_raw);
 			printf("ok T:%d",hotendtC);
 #ifdef PIDTEMP
 			//showString(PSTR(" @:"));
@@ -3666,7 +3668,7 @@ FORCE_INLINE void process_commands() {
 
 	void wait_for_1_8us(){
 		/* NOP inserted:So that high time is 1.8us approximately */
-		for(int i=0;i<100;i++){
+		for(int i=0;i<5;i++){
 //			asm volatile("mov r0, r0");
 			asm volatile("nop");
 		}
@@ -4023,11 +4025,13 @@ else if (e_steps > 0) {
 	}
 
 	void Timer_OVF_vect(){
-#ifdef PID_SOFT_PWM
+	#ifdef PID_SOFT_PWM
 		if(g_heater_pwm_val >= 2)
 		{
 			//      WRITE(HEATER_0_PIN,HIGH);
-			XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
+			//XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
+			_SET(shields_data , HEATER_PIN);
+			XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
 			if(g_heater_pwm_val <= 253){
 				//        OCR2A = g_heater_pwm_val;
 				XTmrCtr_SetResetValue(&TimerInstancePtr2,
@@ -4043,7 +4047,9 @@ else if (e_steps > 0) {
 		else
 		{
 			//      WRITE(HEATER_0_PIN,LOW);
-			XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
+			_CLR(shields_data , HEATER_PIN);
+			XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+			//XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
 			//      OCR2A = 192;
 			XTmrCtr_SetResetValue(&TimerInstancePtr2,
 					1, //Change with generic value
@@ -4053,15 +4059,19 @@ else if (e_steps > 0) {
 	}
 
 	void Timer_COMP_vect(){
-		   if(g_heater_pwm_val > 253)
+		if(g_heater_pwm_val > 253)
 		   {
 		//     WRITE(HEATER_0_PIN,HIGH);
-				XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
+			_SET(shields_data , HEATER_PIN);
+			XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+			//	XGpio_DiscreteWrite(&HeaterInst, 1, 0x01);
 		   }
 		   else
 		   {
 		//     WRITE(HEATER_0_PIN,LOW);
-				XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
+				_CLR(shields_data , HEATER_PIN);
+				XGpio_DiscreteWrite(&ShieldInst, 1, shields_data);
+				//XGpio_DiscreteWrite(&HeaterInst, 1, 0x00);
 		   }
 	}
 
@@ -4556,12 +4566,12 @@ else if (e_steps > 0) {
 		if (xStatus != XST_SUCCESS)
 			// return XST_FAILURE;
 			return;
-		xStatus = XGpio_Initialize(&HeaterInst, HEATER_DEVICE_ID);
-		if (xStatus != XST_SUCCESS)
-			// return XST_FAILURE;
-			return;
+//		xStatus = XGpio_Initialize(&HeaterInst, HEATER_DEVICE_ID);
+//		if (xStatus != XST_SUCCESS)
+//			// return XST_FAILURE;
+//			return;
 		// Set LEDs direction to outputs
-		XGpio_SetDataDirection(&HeaterInst, 1, 0x00);
+//		XGpio_SetDataDirection(&HeaterInst, 1, 0x00);
 
 		u32 shield_dir = 0x00;
 		_SET(shield_dir, X_MAX_PIN);
@@ -4594,13 +4604,13 @@ else if (e_steps > 0) {
 				&TimerInstancePtr);
 
 		XTmrCtr_SetResetValue(&TimerInstancePtr,
-				0, //Change with generic value
+				0, //Channel 0
 				2000*50); //(OCR1A=2000) => 1kHz. 100MHz(FPGA)/2MHz(Mega2560 pre-scaled)=50.
 		//			//Therefore, (2000*50) => 1kHz on AXI timer. Whatever times 50 makes AXI timer value.
 		//			//0xf8000000);
 
 		XTmrCtr_SetOptions(&TimerInstancePtr,
-				XPAR_TMRCTR_0_DEVICE_ID,
+				0, //Channel 0
 				(XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION | XTC_DOWN_COUNT_OPTION));//Timer1 is DOWN counter
 
 		//**************************************************************************//
@@ -4632,10 +4642,10 @@ else if (e_steps > 0) {
 		Xil_Out32(TimerInstancePtr2.BaseAddress + XTmrCtr_Offsets[1] + XTC_TCSR_OFFSET, CounterControlReg);
 
 		XTmrCtr_SetResetValue(&TimerInstancePtr2,
-				0, //Change with generic value
+				0, //Channel 0
 				0x30d40);//500Hz
 		XTmrCtr_SetResetValue(&TimerInstancePtr2,
-				1, //Change with generic value
+				1, //Channel 1
 				0x0);
 
 		xStatus = XIntc_Initialize(&IntcInstancePtr, XPAR_INTC_0_DEVICE_ID);
@@ -4643,15 +4653,15 @@ else if (e_steps > 0) {
 			print("intc init error\n\r");
 		}
 
-		xStatus = XIntc_Connect(&IntcInstancePtr, XPAR_TMRCTR_0_DEVICE_ID,
+		xStatus = XIntc_Connect(&IntcInstancePtr, XPAR_INTC_0_TMRCTR_0_VEC_ID,
 				(XInterruptHandler)XTmrCtr_InterruptHandler,
 				(void*)&TimerInstancePtr);
 		if (xStatus != XST_SUCCESS){
 			print("connect timer0 error\n\r");
 		}
-		xStatus = XIntc_Connect(&IntcInstancePtr, XPAR_TMRCTR_1_DEVICE_ID,
+		xStatus = XIntc_Connect(&IntcInstancePtr, XPAR_INTC_0_TMRCTR_1_VEC_ID,
 				(XInterruptHandler)XTmrCtr_InterruptHandler,
-				(void*)&TimerInstancePtr);
+				(void*)&TimerInstancePtr2);
 		if (xStatus != XST_SUCCESS){
 			print("connect timer1 error\n\r");
 		}
@@ -4659,7 +4669,8 @@ else if (e_steps > 0) {
 		if (xStatus != XST_SUCCESS){
 			print("intc start error\n\r");
 		}
-		XIntc_Enable(&IntcInstancePtr, XPAR_INTC_0_DEVICE_ID);
+		XIntc_Enable(&IntcInstancePtr, XPAR_INTC_0_TMRCTR_0_VEC_ID);
+		XIntc_Enable(&IntcInstancePtr, XPAR_INTC_0_TMRCTR_1_VEC_ID);
 		microblaze_enable_interrupts();
 
 		XTmrCtr_Start(&TimerInstancePtr,0);

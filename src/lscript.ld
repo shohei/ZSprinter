@@ -17,7 +17,7 @@ _HEAP_SIZE = DEFINED(_HEAP_SIZE) ? _HEAP_SIZE : 0x800;
 
 MEMORY
 {
-   iop_arduino_lmb_lmb_bram_if_cntlr_Mem : ORIGIN = 0x50, LENGTH = 0xFFB0
+   iop_arduino_lmb_lmb_bram_if_cntlr_Mem : ORIGIN = 0x50, LENGTH = 0x3FFB0
    ps7_qspi_linear_0 : ORIGIN = 0xFC000000, LENGTH = 0x1000000
 }
 
